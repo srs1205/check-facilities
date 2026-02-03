@@ -14,6 +14,7 @@ const App: React.FC = () => {
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
   const [report, setReport] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -147,26 +148,26 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-36">
-      <header className="sticky top-0 z-50 bg-slate-900 text-white px-6 py-4 shadow-xl">
+      <header className="sticky top-0 z-50 bg-slate-900 text-white px-4 sm:px-6 py-3 sm:py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-black tracking-tighter">SMART CHECKER</h1>
-            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
+            <h1 className="text-lg sm:text-xl font-black tracking-tighter">SMART CHECKER</h1>
+            <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
           </div>
           <div className="flex items-center gap-4">
-            <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
+            <button onClick={handleReset} className="text-[9px] sm:text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-3 sm:px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
           </div>
         </div>
       </header>
 
       <main className="max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
         {/* Floor Selection */}
-        <div className="flex gap-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
           {[2, 3].map(f => (
             <button
               key={f}
               onClick={() => setCurrentFloor(f as 2 | 3)}
-              className={`flex-1 py-5 rounded-2xl font-black text-xl transition-all border-b-4 ${currentFloor === f ? 'bg-slate-900 text-white border-slate-700 shadow-xl scale-[1.02]' : 'bg-white text-slate-300 border-slate-200'}`}
+              className={`flex-1 py-4 sm:py-5 rounded-2xl font-black text-lg sm:text-xl transition-all border-b-4 ${currentFloor === f ? 'bg-slate-900 text-white border-slate-700 shadow-xl scale-[1.02]' : 'bg-white text-slate-300 border-slate-200'}`}
             >
               {f}층 열람실
               <span className="block text-[10px] opacity-50">{f === 2 ? '128' : '110'} Seats</span>
@@ -175,7 +176,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Stats Row */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center px-8 shadow-sm">
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center px-4 sm:px-8 shadow-sm">
            <div className="flex gap-8">
               <div className="text-center">
                  <p className="text-[10px] font-black text-slate-400">점검완료</p>
@@ -193,7 +194,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Legend */}
-        <div className="flex gap-4 justify-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
+        <div className="flex flex-wrap gap-3 justify-center text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-tighter">
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> 미점검</div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded"></div> 정상</div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded"></div> 이상발생</div>
@@ -222,11 +223,11 @@ const App: React.FC = () => {
       </main>
 
       {/* Primary Floating Action Button */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-[60]">
+      <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4 sm:px-6 z-[60]">
         <button
           onClick={handleGenerateReport}
           disabled={isGenerating || stats.issues === 0}
-          className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
+          className={`w-full py-4 sm:py-5 rounded-2xl font-black text-base sm:text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
             isGenerating || stats.issues === 0 
               ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
