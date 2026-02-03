@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { INITIAL_SEATS, ISSUE_COLORS } from './constants';
+import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
 import { generateMaintenanceReport } from './services/geminiService';
@@ -34,6 +34,10 @@ const App: React.FC = () => {
     return { checked, issues, total: floorSeats.length };
   }, [seats, currentFloor]);
 
+  const seatMap = useMemo(() => {
+    return new Map(seats.map(seat => [`${seat.floor}-${seat.number}`, seat]));
+  }, [seats]);
+
   const updateSeat = (id: string, data: InspectionData) => {
     setSeats(prev => prev.map(s => s.id === id ? { 
       ...s, 
@@ -46,14 +50,7 @@ const App: React.FC = () => {
     setSelectedSeatId(seat.id);
   };
 
-  // 모달을 닫을 때 아무것도 안하고 나가면(미점검 상태면) 정상으로 처리
   const handleModalClose = () => {
-    if (selectedSeatId) {
-      const seat = seats.find(s => s.id === selectedSeatId);
-      if (seat && getSeatStatus(seat) === 'pending') {
-        updateSeat(selectedSeatId, { chair: 'ok', light: 'ok', lampShade: 'ok', others: '' });
-      }
-    }
     setSelectedSeatId(null);
   };
 
@@ -90,32 +87,58 @@ const App: React.FC = () => {
     return 'pending';
   };
 
-  const renderMap = () => {
-    const floorSeats = seats.filter(s => s.floor === currentFloor);
-    // 4자리씩 그룹화 (2x2 테이블 형태)
-    const blocks: Seat[][] = [];
-    for (let i = 0; i < floorSeats.length; i += 4) {
-      blocks.push(floorSeats.slice(i, i + 4));
+  const renderBlock = (item: SeatLayoutItem) => {
+    if (item.type === 'label') {
+      return (
+        <div
+          key={item.id}
+          style={{ gridColumnStart: item.col, gridColumnEnd: `span ${item.cols}`, gridRowStart: item.row, gridRowEnd: `span ${item.rows}` }}
+          className="flex items-center justify-center text-slate-400 font-black text-2xl tracking-widest"
+        >
+          {item.text}
+        </div>
+      );
     }
 
+    const maxCols = Math.max(...item.seats.map(row => row.length));
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 p-6 bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[500px]">
-        {blocks.map((block, bIdx) => (
-          <div key={bIdx} className="grid grid-cols-2 gap-1 border border-slate-300 bg-slate-100 p-1.5 rounded-lg shadow-sm">
-            {block.map(seat => (
-              <button
-                key={seat.id}
-                onClick={() => handleSeatClick(seat)}
-                className={`w-10 h-10 sm:w-12 sm:h-12 text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
-              >
-                {seat.number}
-              </button>
-            ))}
+      <div
+        key={item.id}
+        style={{ gridColumnStart: item.col, gridColumnEnd: `span ${maxCols}`, gridRowStart: item.row, gridRowEnd: `span ${item.seats.length}` }}
+        className="grid gap-1 border border-slate-300 bg-slate-100/80 p-1.5 rounded-lg shadow-sm"
+      >
+        {item.seats.map((row, rowIdx) => (
+          <div key={`${item.id}-row-${rowIdx}`} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+            {row.map(number => {
+              const seat = seatMap.get(`${currentFloor}-${number}`);
+              if (!seat) {
+                return (
+                  <div key={`${item.id}-${number}`} className="w-10 h-10 sm:w-11 sm:h-11" />
+                );
+              }
+              return (
+                <button
+                  key={seat.id}
+                  onClick={() => handleSeatClick(seat)}
+                  className={`w-10 h-10 sm:w-11 sm:h-11 text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
+                >
+                  {seat.number}
+                </button>
+              );
+            })}
           </div>
         ))}
       </div>
     );
   };
+
+  const renderMap = () => (
+    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[560px]">
+      <div className="relative grid grid-cols-[repeat(24,minmax(0,1fr))] auto-rows-[44px] gap-3 p-6 min-w-[900px]">
+        {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
+      </div>
+    </div>
+  );
 
   const selectedSeat = useMemo(() => 
     seats.find(s => s.id === selectedSeatId), 
