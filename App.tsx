@@ -17,8 +17,8 @@ const App: React.FC = () => {
   });
   const [currentFloor, setCurrentFloor] = useState<2 | 3>(2);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
-  const [reportGeneratedAt, setReportGeneratedAt] = useState<Date | null>(null);
-  const [reportRows, setReportRows] = useState<Array<{ floor: number; seat: number; item: string; detail: string }>>([]);
+  const [report, setReport] = useState<string | null>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [zoom, setZoom] = useState(1);
 
   useEffect(() => {
@@ -150,7 +150,7 @@ const App: React.FC = () => {
         <div
           key={item.id}
           style={{ gridColumnStart: item.col, gridColumnEnd: `span ${item.cols}`, gridRowStart: item.row, gridRowEnd: `span ${item.rows}` }}
-          className="flex items-center justify-center text-slate-400 font-black text-xl tracking-widest"
+          className="flex items-center justify-center text-slate-400 font-black text-2xl tracking-widest"
         >
           {item.text}
         </div>
@@ -170,14 +170,14 @@ const App: React.FC = () => {
               const seat = seatMap.get(`${currentFloor}-${number}`);
               if (!seat) {
                 return (
-                  <div key={`${item.id}-${number}`} className="w-7 h-7 sm:w-9 sm:h-9" />
+                  <div key={`${item.id}-${number}`} className="w-10 h-10 sm:w-11 sm:h-11" />
                 );
               }
               return (
                 <button
                   key={seat.id}
                   onClick={() => handleSeatClick(seat)}
-                  className={`w-7 h-7 sm:w-9 sm:h-9 text-[9px] sm:text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
+                  className={`w-10 h-10 sm:w-11 sm:h-11 text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
                 >
                   {seat.number}
                 </button>
@@ -190,37 +190,9 @@ const App: React.FC = () => {
   };
 
   const renderMap = () => (
-    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-hidden">
-      <div className="flex items-center justify-between px-4 pt-4 text-[11px] font-bold text-slate-500">
-        <span>도면 줌</span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setZoom(z => Math.max(0.75, Math.round((z - 0.1) * 10) / 10))}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200"
-          >
-            −
-          </button>
-          <span className="min-w-[44px] text-center">{Math.round(zoom * 100)}%</span>
-          <button
-            onClick={() => setZoom(z => Math.min(1.5, Math.round((z + 0.1) * 10) / 10))}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200"
-          >
-            +
-          </button>
-          <button
-            onClick={() => setZoom(1)}
-            className="px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200"
-          >
-            100%
-          </button>
-        </div>
-      </div>
-      <div className="overflow-auto scrollbar-hide">
-        <div className="origin-top-left scale-[var(--zoom)] p-4 sm:p-6 min-w-[720px]" style={{ ['--zoom' as string]: zoom }}>
-          <div className="relative grid grid-cols-[repeat(24,minmax(0,1fr))] auto-rows-[34px] gap-2">
-            {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
-          </div>
-        </div>
+    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[560px]">
+      <div className="relative grid grid-cols-[repeat(24,minmax(0,1fr))] auto-rows-[44px] gap-3 p-6 min-w-[900px]">
+        {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
       </div>
     </div>
   );
@@ -344,8 +316,9 @@ const App: React.FC = () => {
       <div className="fixed bottom-6 sm:bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-4 sm:px-6 z-[60]">
         <button
           onClick={handleGenerateReport}
+          disabled={isGenerating || stats.issues === 0}
           className={`w-full py-4 sm:py-5 rounded-2xl font-black text-base sm:text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
-            stats.issues === 0 
+            isGenerating || stats.issues === 0 
               ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
           }`}
