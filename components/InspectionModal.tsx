@@ -19,8 +19,10 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
       others: current.others || ''
     };
   });
+  const [isTouched, setIsTouched] = useState(false);
 
   const toggleStatus = (field: keyof Omit<InspectionData, 'others'>) => {
+    setIsTouched(true);
     setData(prev => {
       const current = prev[field];
       const next: Status = current === 'ok' ? 'issue' : 'ok';
@@ -52,7 +54,17 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
             <h2 className="text-xl font-black">{seat.floor}층 {seat.number}번 좌석</h2>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inspection Panel</p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
+          <button
+            onClick={() => {
+              if (isTouched && !window.confirm('저장하지 않은 변경사항이 있습니다. 닫을까요?')) {
+                return;
+              }
+              onClose();
+            }}
+            className="p-2 hover:bg-slate-800 rounded-full transition-colors"
+          >
+            ✕
+          </button>
         </div>
         
         <div className="p-6 space-y-6">
@@ -78,11 +90,22 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
               className="w-full border border-slate-200 bg-slate-50 rounded-2xl p-4 h-20 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-medium"
               placeholder="추가적인 파손이나 특이사항이 있으면 적어주세요."
               value={data.others}
-              onChange={(e) => setData({ ...data, others: e.target.value })}
+              onChange={(e) => {
+                setIsTouched(true);
+                setData({ ...data, others: e.target.value });
+              }}
             />
           </div>
 
           <div className="flex gap-3 pt-2">
+            <button
+              onClick={() => {
+                onSave({ chair: 'pending', light: 'pending', lampShade: 'pending', others: data.others });
+              }}
+              className="flex-1 py-4 bg-slate-200 text-slate-700 rounded-2xl font-black hover:bg-slate-300 shadow-sm active:scale-95 transition-all"
+            >
+              점검 보류
+            </button>
             <button
               onClick={() => onSave(data)}
               className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
@@ -90,6 +113,9 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
               점검 완료
             </button>
           </div>
+          <p className="text-[10px] text-slate-400 font-semibold text-center">
+            점검 보류를 선택하면 미점검 상태로 유지됩니다.
+          </p>
         </div>
       </div>
     </div>
