@@ -3,12 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
-
-const ISSUE_FIELDS: { key: keyof Omit<InspectionData, 'others'>; label: string }[] = [
-  { key: 'chair', label: '의자' },
-  { key: 'light', label: '조명' },
-  { key: 'lampShade', label: '전등 갓' }
-];
+import { generateMaintenanceReport } from './services/geminiService';
 
 const App: React.FC = () => {
   const [seats, setSeats] = useState<Seat[]>(() => {
@@ -64,77 +59,26 @@ const App: React.FC = () => {
     if (window.confirm('모든 점검 데이터를 초기화하시겠습니까?')) {
       setSeats(INITIAL_SEATS);
       localStorage.removeItem('inspection_data_v5');
-      setReportGeneratedAt(null);
-      setReportRows([]);
+      setReport(null);
       setSelectedSeatId(null);
     }
   };
 
-  const buildIssueRows = (targetSeats: Seat[]) => {
-    return targetSeats.flatMap(seat => {
-      const detailNote = seat.inspection.others?.trim();
-      return ISSUE_FIELDS.flatMap(field => {
-        if (seat.inspection[field.key] !== 'issue') return [];
-        return [{
-          floor: seat.floor,
-          seat: seat.number,
-          item: field.label,
-          detail: detailNote ? `이상 · ${detailNote}` : '이상'
-        }];
-      });
-    });
-  };
-
-  const handleGenerateReport = () => {
-    const rows = buildIssueRows(seats);
-    if (rows.length === 0) {
+  const handleGenerateReport = async () => {
+    if (seats.filter(s => getSeatStatus(s) === 'issue').length === 0) {
       alert('발견된 이상 항목이 없습니다.');
       return;
     }
-    setReportRows(rows);
-    const now = new Date();
-    setReportGeneratedAt(now);
-    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
-  };
-
-  const formatDateTime = (date: Date) => date.toLocaleString('ko-KR');
-
-  const formatFileDate = (date: Date) => {
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}_${pad(date.getHours())}${pad(date.getMinutes())}`;
-  };
-
-  const handleExportExcel = () => {
-    if (!reportGeneratedAt) return;
-    const header = ['층', '좌석', '점검항목', '점검내용'];
-    const sheetRows: Array<Array<string | number>> = [
-      ['보고서 생성일시', formatDateTime(reportGeneratedAt)],
-      [],
-      header,
-      ...reportRows.map(row => [row.floor, `${row.seat}번`, row.item, row.detail])
-    ];
-    const csvContent = sheetRows
-      .map(row =>
-        row
-          .map(cell => {
-            const cellString = String(cell ?? '');
-            if (cellString.includes(',') || cellString.includes('"') || cellString.includes('\n')) {
-              return `"${cellString.replace(/"/g, '""')}"`;
-            }
-            return cellString;
-          })
-          .join(',')
-      )
-      .join('\n');
-    const blob = new Blob([`\uFEFF${csvContent}`], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `maintenance_report_${formatFileDate(reportGeneratedAt)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+    setIsGenerating(true);
+    try {
+      const result = await generateMaintenanceReport(seats);
+      setReport(result);
+      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const getSeatStatus = (seat: Seat): Status => {
@@ -259,55 +203,21 @@ const App: React.FC = () => {
         {/* Map Layout */}
         {renderMap()}
 
-        {/* Report Output */}
-        {reportGeneratedAt && (
-          <div className="bg-white p-6 sm:p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in slide-in-from-bottom-8 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 className="text-xl sm:text-2xl font-black flex items-center gap-3">
-                  <span className="bg-indigo-600 text-white p-2 rounded-xl">🧾</span> 점검 결과 리포트
-                </h2>
-                <p className="text-[11px] sm:text-xs text-slate-500 font-bold mt-2">
-                  생성 일시: {formatDateTime(reportGeneratedAt)}
-                </p>
-              </div>
-              <button
-                onClick={handleExportExcel}
-                className="px-4 py-3 sm:px-5 sm:py-3 rounded-xl bg-emerald-600 text-white font-black shadow-lg hover:bg-emerald-700 transition-all"
-              >
-                엑셀로 내보내기
-              </button>
+        {/* AI Report Output */}
+        {report && (
+          <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in slide-in-from-bottom-8">
+            <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
+              <span className="bg-indigo-600 text-white p-2 rounded-xl">📝</span> AI 점검 결과 리포트
+            </h2>
+            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed text-sm font-medium">
+              {report}
             </div>
-
-            <div className="overflow-auto border border-slate-200 rounded-2xl">
-              <table className="min-w-full text-xs sm:text-sm">
-                <thead className="bg-slate-100 text-slate-600">
-                  <tr>
-                    <th className="px-4 py-3 text-left font-black">층</th>
-                    <th className="px-4 py-3 text-left font-black">좌석</th>
-                    <th className="px-4 py-3 text-left font-black">점검항목</th>
-                    <th className="px-4 py-3 text-left font-black">점검내용</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportRows.map((row, index) => (
-                    <tr key={`${row.floor}-${row.seat}-${row.item}-${index}`} className="border-t border-slate-200">
-                      <td className="px-4 py-3 font-bold text-slate-700">{row.floor}층</td>
-                      <td className="px-4 py-3 font-bold text-slate-700">{row.seat}번</td>
-                      <td className="px-4 py-3 text-slate-600">{row.item}</td>
-                      <td className="px-4 py-3 text-slate-600">{row.detail}</td>
-                    </tr>
-                  ))}
-                  {reportRows.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-slate-400 font-semibold">
-                        이상 항목이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+            <button 
+              onClick={() => { navigator.clipboard.writeText(report); alert('복사되었습니다.'); }}
+              className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95"
+            >
+              내용 복사 후 전달
+            </button>
           </div>
         )}
       </main>
@@ -322,9 +232,8 @@ const App: React.FC = () => {
               ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
           }`}
-          disabled={stats.issues === 0}
         >
-          점검 리포트 생성
+          {isGenerating ? "AI가 리포트 작성 중..." : "유지보수 AI 리포트 생성"}
         </button>
       </div>
 
