@@ -1,249 +1,172 @@
+import React, { useMemo, useState } from 'react';
+import { analyzeSchedulePdfs } from './services/scheduleService';
+import { StudentSchedule, Weekday } from './types';
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
-import { Seat, InspectionData, Status } from './types';
-import InspectionModal from './components/InspectionModal';
-import { generateMaintenanceReport } from './services/geminiService';
+const WEEKDAYS: Weekday[] = ['월', '화', '수', '목', '금', '토', '일'];
+
+const toMinutes = (time: string) => {
+  const [hours, minutes] = time.split(':').map(Number);
+  return hours * 60 + minutes;
+};
+
+const formatSlots = (schedule: StudentSchedule, dayFilter?: Weekday) => {
+  const slots = dayFilter ? schedule.availableSlots.filter(slot => slot.day === dayFilter) : schedule.availableSlots;
+  if (slots.length === 0) return '가능 시간 없음';
+  return slots
+    .map(slot => `${slot.day} ${slot.start}~${slot.end}${slot.note ? ` (${slot.note})` : ''}`)
+    .join(', ');
+};
+
+const hasCoverage = (schedule: StudentSchedule, day: Weekday, start: string, end: string) => {
+  const startMinute = toMinutes(start);
+  const endMinute = toMinutes(end);
+
+  return schedule.availableSlots.some(slot => {
+    if (slot.day !== day) return false;
+    const slotStart = toMinutes(slot.start);
+    const slotEnd = toMinutes(slot.end);
+    return slotStart <= startMinute && slotEnd >= endMinute;
+  });
+};
 
 const App: React.FC = () => {
-  const [seats, setSeats] = useState<Seat[]>(() => {
-    const saved = localStorage.getItem('inspection_data_v5');
-    return saved ? JSON.parse(saved) : INITIAL_SEATS;
-  });
-  const [currentFloor, setCurrentFloor] = useState<2 | 3>(2);
-  const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
-  const [report, setReport] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [schedules, setSchedules] = useState<StudentSchedule[]>([]);
+  const [warnings, setWarnings] = useState<string[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  useEffect(() => {
-    localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
-  }, [seats]);
+  const [day, setDay] = useState<Weekday>('월');
+  const [startTime, setStartTime] = useState('09:00');
+  const [endTime, setEndTime] = useState('12:00');
 
-  const stats = useMemo(() => {
-    const floorSeats = seats.filter(s => s.floor === currentFloor);
-    const checked = floorSeats.filter(s => 
-      s.inspection.chair !== 'pending' || 
-      s.inspection.light !== 'pending' || 
-      s.inspection.lampShade !== 'pending'
-    ).length;
-    const issues = floorSeats.filter(s => 
-      s.inspection.chair === 'issue' || 
-      s.inspection.light === 'issue' || 
-      s.inspection.lampShade === 'issue'
-    ).length;
-    return { checked, issues, total: floorSeats.length };
-  }, [seats, currentFloor]);
+  const candidates = useMemo(() => {
+    if (toMinutes(startTime) >= toMinutes(endTime)) return [];
+    return schedules.filter(schedule => hasCoverage(schedule, day, startTime, endTime));
+  }, [day, endTime, schedules, startTime]);
 
-  const seatMap = useMemo(() => {
-    return new Map(seats.map(seat => [`${seat.floor}-${seat.number}`, seat]));
-  }, [seats]);
-
-  const updateSeat = (id: string, data: InspectionData) => {
-    setSeats(prev => prev.map(s => s.id === id ? { 
-      ...s, 
-      inspection: data, 
-      lastUpdated: Date.now() 
-    } : s));
-  };
-
-  const handleSeatClick = (seat: Seat) => {
-    setSelectedSeatId(seat.id);
-  };
-
-  const handleModalClose = () => {
-    setSelectedSeatId(null);
-  };
-
-  const handleReset = () => {
-    if (window.confirm('모든 점검 데이터를 초기화하시겠습니까?')) {
-      setSeats(INITIAL_SEATS);
-      localStorage.removeItem('inspection_data_v5');
-      setReport(null);
-      setSelectedSeatId(null);
-    }
-  };
-
-  const handleGenerateReport = async () => {
-    if (seats.filter(s => getSeatStatus(s) === 'issue').length === 0) {
-      alert('발견된 이상 항목이 없습니다.');
+  const handleAnalyze = async () => {
+    if (files.length === 0) {
+      setError('먼저 PDF 파일을 업로드해주세요.');
       return;
     }
-    setIsGenerating(true);
+
+    setError(null);
+    setIsAnalyzing(true);
+
     try {
-      const result = await generateMaintenanceReport(seats);
-      setReport(result);
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
-    } catch (error) {
-      console.error(error);
+      const result = await analyzeSchedulePdfs(files);
+      setSchedules(result.schedules);
+      setWarnings(result.warnings);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '분석 중 오류가 발생했습니다.');
     } finally {
-      setIsGenerating(false);
+      setIsAnalyzing(false);
     }
   };
-
-  const getSeatStatus = (seat: Seat): Status => {
-    const { chair, light, lampShade } = seat.inspection;
-    if (chair === 'issue' || light === 'issue' || lampShade === 'issue') return 'issue';
-    if (chair === 'ok' && light === 'ok' && lampShade === 'ok') return 'ok';
-    return 'pending';
-  };
-
-  const renderBlock = (item: SeatLayoutItem) => {
-    if (item.type === 'label') {
-      return (
-        <div
-          key={item.id}
-          style={{ gridColumnStart: item.col, gridColumnEnd: `span ${item.cols}`, gridRowStart: item.row, gridRowEnd: `span ${item.rows}` }}
-          className="flex items-center justify-center text-slate-400 font-black text-2xl tracking-widest"
-        >
-          {item.text}
-        </div>
-      );
-    }
-
-    const maxCols = Math.max(...item.seats.map(row => row.length));
-    return (
-      <div
-        key={item.id}
-        style={{ gridColumnStart: item.col, gridColumnEnd: `span ${maxCols}`, gridRowStart: item.row, gridRowEnd: `span ${item.seats.length}` }}
-        className="grid gap-1 border border-slate-300 bg-slate-100/80 p-1.5 rounded-lg shadow-sm"
-      >
-        {item.seats.map((row, rowIdx) => (
-          <div key={`${item.id}-row-${rowIdx}`} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
-            {row.map(number => {
-              const seat = seatMap.get(`${currentFloor}-${number}`);
-              if (!seat) {
-                return (
-                  <div key={`${item.id}-${number}`} className="w-10 h-10 sm:w-11 sm:h-11" />
-                );
-              }
-              return (
-                <button
-                  key={seat.id}
-                  onClick={() => handleSeatClick(seat)}
-                  className={`w-10 h-10 sm:w-11 sm:h-11 text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
-                >
-                  {seat.number}
-                </button>
-              );
-            })}
-          </div>
-        ))}
-      </div>
-    );
-  };
-
-  const renderMap = () => (
-    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[560px]">
-      <div className="relative grid grid-cols-[repeat(24,minmax(0,1fr))] auto-rows-[44px] gap-3 p-6 min-w-[900px]">
-        {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
-      </div>
-    </div>
-  );
-
-  const selectedSeat = useMemo(() => 
-    seats.find(s => s.id === selectedSeatId), 
-    [seats, selectedSeatId]
-  );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-36">
-      <header className="sticky top-0 z-50 bg-slate-900 text-white px-6 py-4 shadow-xl">
-        <div className="max-w-6xl mx-auto flex justify-between items-center">
-          <div>
-            <h1 className="text-xl font-black tracking-tighter">SMART CHECKER</h1>
-            <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4 shadow-sm">
+          <h1 className="text-2xl font-black">근로학생 시간표 매칭 도구</h1>
+          <p className="text-sm text-slate-600">
+            학생 시간표 PDF(한 장에 한 명 양식)를 업로드하면 이름/학번/연락처와 근무 가능 시간을 추출합니다.
+            표시가 애매한 경우에는 <strong>검토 필요</strong>로 표시됩니다.
+          </p>
 
-      <main className="max-w-6xl mx-auto p-4 sm:p-8 space-y-6">
-        {/* Floor Selection */}
-        <div className="flex gap-4">
-          {[2, 3].map(f => (
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <input
+              type="file"
+              accept="application/pdf"
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files || []))}
+              className="block w-full text-sm file:mr-4 file:rounded-lg file:border-0 file:bg-indigo-600 file:px-4 file:py-2 file:text-white hover:file:bg-indigo-700"
+            />
             <button
-              key={f}
-              onClick={() => setCurrentFloor(f as 2 | 3)}
-              className={`flex-1 py-5 rounded-2xl font-black text-xl transition-all border-b-4 ${currentFloor === f ? 'bg-slate-900 text-white border-slate-700 shadow-xl scale-[1.02]' : 'bg-white text-slate-300 border-slate-200'}`}
+              onClick={handleAnalyze}
+              disabled={isAnalyzing}
+              className="px-5 py-2.5 rounded-lg bg-slate-900 text-white font-bold disabled:bg-slate-300"
             >
-              {f}층 열람실
-              <span className="block text-[10px] opacity-50">{f === 2 ? '128' : '110'} Seats</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Stats Row */}
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center px-8 shadow-sm">
-           <div className="flex gap-8">
-              <div className="text-center">
-                 <p className="text-[10px] font-black text-slate-400">점검완료</p>
-                 <p className="text-lg font-black text-blue-600">{stats.checked}</p>
-              </div>
-              <div className="text-center">
-                 <p className="text-[10px] font-black text-slate-400">이상발견</p>
-                 <p className="text-lg font-black text-red-500">{stats.issues}</p>
-              </div>
-           </div>
-           <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400">전체 진행률</p>
-              <p className="text-lg font-black text-slate-800">{Math.round((stats.checked/stats.total)*100)}%</p>
-           </div>
-        </div>
-
-        {/* Legend */}
-        <div className="flex gap-4 justify-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> 미점검</div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded"></div> 정상</div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded"></div> 이상발생</div>
-        </div>
-
-        {/* Map Layout */}
-        {renderMap()}
-
-        {/* AI Report Output */}
-        {report && (
-          <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in slide-in-from-bottom-8">
-            <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
-              <span className="bg-indigo-600 text-white p-2 rounded-xl">📝</span> AI 점검 결과 리포트
-            </h2>
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed text-sm font-medium">
-              {report}
-            </div>
-            <button 
-              onClick={() => { navigator.clipboard.writeText(report); alert('복사되었습니다.'); }}
-              className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95"
-            >
-              내용 복사 후 전달
+              {isAnalyzing ? '분석 중...' : 'PDF 분석'}
             </button>
           </div>
-        )}
+
+          {files.length > 0 && (
+            <p className="text-xs text-slate-500">선택된 파일: {files.map(file => file.name).join(', ')}</p>
+          )}
+
+          {error && <p className="text-sm text-red-600 font-semibold">{error}</p>}
+          {warnings.map((warning, idx) => (
+            <p key={`${warning}-${idx}`} className="text-xs text-amber-700">⚠️ {warning}</p>
+          ))}
+        </section>
+
+        <section className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm space-y-4">
+          <h2 className="text-xl font-black">필요 시간대 입력</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <select
+              value={day}
+              onChange={(e) => setDay(e.target.value as Weekday)}
+              className="rounded-lg border border-slate-300 px-3 py-2"
+            >
+              {WEEKDAYS.map(weekday => (
+                <option key={weekday} value={weekday}>{weekday}요일</option>
+              ))}
+            </select>
+            <input type="time" step={1800} value={startTime} onChange={(e) => setStartTime(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" />
+            <input type="time" step={1800} value={endTime} onChange={(e) => setEndTime(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2" />
+            <div className="flex items-center text-sm text-slate-600">{day}요일 {startTime}~{endTime}</div>
+          </div>
+
+          {toMinutes(startTime) >= toMinutes(endTime) && (
+            <p className="text-sm text-red-600">종료 시간은 시작 시간보다 뒤여야 합니다.</p>
+          )}
+        </section>
+
+        <section className="space-y-4">
+          <h2 className="text-xl font-black">가능 학생 ({candidates.length}명)</h2>
+          {candidates.length === 0 ? (
+            <p className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-600">조건에 맞는 학생이 없습니다.</p>
+          ) : (
+            candidates.map(student => (
+              <article key={`${student.sourceFileName}-${student.studentId}`} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                  <div>
+                    <p className="font-black text-lg">{student.name}</p>
+                    <p className="text-sm text-slate-600">학번 {student.studentId} · 연락처 {student.contact}</p>
+                  </div>
+                  <p className="text-xs text-slate-500">원본: {student.sourceFileName}</p>
+                </div>
+                <p className="mt-3 text-sm text-slate-700"><strong>해당 요일 시간표:</strong> {formatSlots(student, day)}</p>
+                {student.reviewRequired && (
+                  <div className="mt-3 rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                    <p className="font-bold">사람 확인 필요</p>
+                    <ul className="list-disc pl-4 mt-1">
+                      {student.reviewReasons.map((reason, idx) => <li key={`${reason}-${idx}`}>{reason}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </article>
+            ))
+          )}
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-xl font-black">전체 분석 결과</h2>
+          {schedules.length === 0 ? (
+            <p className="bg-white border border-slate-200 rounded-xl p-4 text-sm text-slate-600">아직 분석된 시간표가 없습니다.</p>
+          ) : (
+            schedules.map(student => (
+              <article key={`all-${student.sourceFileName}-${student.studentId}`} className="bg-white border border-slate-200 rounded-xl p-4 text-sm">
+                <p className="font-bold">{student.name} ({student.studentId})</p>
+                <p className="text-slate-600">{student.contact}</p>
+                <p className="mt-2 text-slate-700">{formatSlots(student)}</p>
+              </article>
+            ))
+          )}
+        </section>
       </main>
-
-      {/* Primary Floating Action Button */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-[60]">
-        <button
-          onClick={handleGenerateReport}
-          disabled={isGenerating || stats.issues === 0}
-          className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
-            isGenerating || stats.issues === 0 
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
-              : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
-          }`}
-        >
-          {isGenerating ? "AI가 리포트 작성 중..." : "유지보수 AI 리포트 생성"}
-        </button>
-      </div>
-
-      {/* Modal */}
-      {selectedSeat && (
-        <InspectionModal
-          seat={selectedSeat}
-          onSave={(data) => { updateSeat(selectedSeat.id, data); setSelectedSeatId(null); }}
-          onClose={handleModalClose}
-        />
-      )}
     </div>
   );
 };
