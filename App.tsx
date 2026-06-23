@@ -102,6 +102,7 @@ const App: React.FC = () => {
       await fetch(SHEET_URL, {
         method: 'POST',
         mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ rows }),
       });
       alert('리포트가 시트에 저장되었습니다.');
