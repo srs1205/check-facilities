@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
-import { generateMaintenanceReport } from './services/geminiService';
+
 
 const App: React.FC = () => {
   const [seats, setSeats] = useState<Seat[]>(() => {
@@ -12,8 +12,7 @@ const App: React.FC = () => {
   });
   const [currentFloor, setCurrentFloor] = useState<2 | 3>(2);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
-  const [report, setReport] = useState<string | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string }[] | null>(null);
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -63,21 +62,21 @@ const App: React.FC = () => {
     }
   };
 
-  const handleGenerateReport = async () => {
-    if (seats.filter(s => getSeatStatus(s) === 'issue').length === 0) {
+  const handleGenerateReport = () => {
+    const issueSeats = seats.filter(s => getSeatStatus(s) === 'issue');
+    if (issueSeats.length === 0) {
       alert('발견된 이상 항목이 없습니다.');
       return;
     }
-    setIsGenerating(true);
-    try {
-      const result = await generateMaintenanceReport(seats);
-      setReport(result);
-      setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsGenerating(false);
-    }
+    setReport(issueSeats.map(s => ({
+      floor: s.floor,
+      number: s.number,
+      updatedAt: s.lastUpdated ?? Date.now(),
+      chair: s.inspection.chair,
+      light: s.inspection.light,
+      lampShade: s.inspection.lampShade,
+    })));
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
   };
 
   const getSeatStatus = (seat: Seat): Status => {
@@ -134,7 +133,7 @@ const App: React.FC = () => {
 
   const renderMap = () => (
     <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[560px]">
-      <div className="relative grid grid-cols-[repeat(24,minmax(0,1fr))] auto-rows-[44px] gap-3 p-6 min-w-[900px]">
+      <div className="relative grid grid-cols-[repeat(24,44px)] auto-rows-[44px] gap-3 p-6 min-w-fit">
         {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
       </div>
     </div>
@@ -202,21 +201,35 @@ const App: React.FC = () => {
         {/* Map Layout */}
         {renderMap()}
 
-        {/* AI Report Output */}
+        {/* Report Table */}
         {report && (
-          <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl animate-in slide-in-from-bottom-8">
-            <h2 className="text-2xl font-black mb-6 flex items-center gap-3">
-              <span className="bg-indigo-600 text-white p-2 rounded-xl">📝</span> AI 점검 결과 리포트
-            </h2>
-            <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed text-sm font-medium">
-              {report}
+          <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl">
+            <h2 className="text-2xl font-black mb-6">점검 결과 리포트</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-900 text-white">
+                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓'].map(h => (
+                      <th key={h} className="px-4 py-3 font-black">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.map((row, i) => (
+                    <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                      <td className="px-4 py-2 font-bold">{row.floor}층</td>
+                      <td className="px-4 py-2 font-bold">{row.number}번</td>
+                      <td className="px-4 py-2 text-slate-500">{new Date(row.updatedAt).toLocaleString('ko-KR')}</td>
+                      {[row.chair, row.light, row.lampShade].map((s, j) => (
+                        <td key={j} className={`px-4 py-2 font-bold ${s === 'issue' ? 'text-red-500' : 'text-blue-500'}`}>
+                          {s === 'issue' ? '이상' : '정상'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            <button 
-              onClick={() => { navigator.clipboard.writeText(report); alert('복사되었습니다.'); }}
-              className="w-full mt-6 py-4 bg-slate-900 text-white rounded-2xl font-black hover:bg-slate-800 transition-all shadow-lg active:scale-95"
-            >
-              내용 복사 후 전달
-            </button>
           </div>
         )}
       </main>
@@ -225,14 +238,14 @@ const App: React.FC = () => {
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-[60]">
         <button
           onClick={handleGenerateReport}
-          disabled={isGenerating || stats.issues === 0}
+          disabled={stats.issues === 0}
           className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
-            isGenerating || stats.issues === 0 
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed' 
+            stats.issues === 0
+              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
               : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
           }`}
         >
-          {isGenerating ? "AI가 리포트 작성 중..." : "유지보수 AI 리포트 생성"}
+          유지보수 리포트 생성
         </button>
       </div>
 
