@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
@@ -12,7 +13,8 @@ const App: React.FC = () => {
   });
   const [currentFloor, setCurrentFloor] = useState<2 | 3>(2);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
-  const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string }[] | null>(null);
+  const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -75,8 +77,69 @@ const App: React.FC = () => {
       chair: s.inspection.chair,
       light: s.inspection.light,
       lampShade: s.inspection.lampShade,
+      others: s.inspection.others ?? '',
     })));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+  };
+
+  const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
+
+  const handleExport = () => {
+    if (!report) return;
+    const rows = report.map(r => ({
+      층: `${r.floor}층`,
+      좌석: `${r.number}번`,
+      점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
+      의자: STATUS_KO[r.chair] ?? r.chair,
+      조명: STATUS_KO[r.light] ?? r.light,
+      전등갓: STATUS_KO[r.lampShade] ?? r.lampShade,
+      비고: r.others,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [10, 8, 20, 8, 8, 8, 30].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '점검결과');
+    XLSX.writeFile(wb, `점검결과_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const wb = XLSX.read(ev.target?.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
+        const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
+        setSeats(prev => {
+          const next = [...prev];
+          rows.forEach(row => {
+            const floor = parseInt(row['층']) as 2 | 3;
+            const number = parseInt(row['좌석']);
+            const idx = next.findIndex(s => s.floor === floor && s.number === number);
+            if (idx === -1) return;
+            next[idx] = {
+              ...next[idx],
+              inspection: {
+                chair: KO_STATUS[row['의자']] ?? next[idx].inspection.chair,
+                light: KO_STATUS[row['조명']] ?? next[idx].inspection.light,
+                lampShade: KO_STATUS[row['전등갓']] ?? next[idx].inspection.lampShade,
+                others: row['비고'] ?? next[idx].inspection.others,
+              },
+              lastUpdated: Date.now(),
+            };
+          });
+          return next;
+        });
+        setReport(null);
+        alert(`${rows.length}개 좌석 데이터가 반영되었습니다.`);
+      } catch {
+        alert('파일을 읽는 중 오류가 발생했습니다.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
   };
 
   const getSeatStatus = (seat: Seat): Status => {
@@ -152,7 +215,9 @@ const App: React.FC = () => {
             <h1 className="text-xl font-black tracking-tighter">SMART CHECKER</h1>
             <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
+            <button onClick={() => importRef.current?.click()} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-4 py-2 rounded-xl font-black hover:bg-blue-500 hover:text-white transition-all">엑셀 가져오기</button>
             <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
           </div>
         </div>
@@ -204,12 +269,20 @@ const App: React.FC = () => {
         {/* Report Table */}
         {report && (
           <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl">
-            <h2 className="text-2xl font-black mb-6">점검 결과 리포트</h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-black">점검 결과 리포트</h2>
+              <button
+                onClick={handleExport}
+                className="text-sm bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-emerald-700 transition-all active:scale-95"
+              >
+                엑셀 내보내기
+              </button>
+            </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓'].map(h => (
+                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓', '비고'].map(h => (
                       <th key={h} className="px-4 py-3 font-black">{h}</th>
                     ))}
                   </tr>
@@ -222,9 +295,10 @@ const App: React.FC = () => {
                       <td className="px-4 py-2 text-slate-500">{new Date(row.updatedAt).toLocaleString('ko-KR')}</td>
                       {[row.chair, row.light, row.lampShade].map((s, j) => (
                         <td key={j} className={`px-4 py-2 font-bold ${s === 'issue' ? 'text-red-500' : 'text-blue-500'}`}>
-                          {s === 'issue' ? '이상' : '정상'}
+                          {STATUS_KO[s] ?? s}
                         </td>
                       ))}
+                      <td className="px-4 py-2 text-slate-600">{row.others || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
