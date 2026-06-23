@@ -15,6 +15,8 @@ const App: React.FC = () => {
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
   const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const [syncing, setSyncing] = useState<'save' | 'load' | null>(null);
+  const SHEET_URL = 'https://script.google.com/macros/s/AKfycby3N8WL6T2dRH2tkuZOQ3XW6DGjFyT1rsb3vZTNyiyo_LNfhQG585iksuf95GD4uqvN/exec';
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -83,6 +85,49 @@ const App: React.FC = () => {
   };
 
   const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
+
+  const handleSaveToSheet = async () => {
+    setSyncing('save');
+    try {
+      await fetch(SHEET_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        body: JSON.stringify({ seats }),
+      });
+      alert('시트에 저장되었습니다.');
+    } catch {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setSyncing(null);
+    }
+  };
+
+  const handleLoadFromSheet = async () => {
+    setSyncing('load');
+    try {
+      const res = await fetch(SHEET_URL);
+      const { seats: rows } = await res.json();
+      const loaded: Seat[] = rows.map((r: Record<string, string>) => ({
+        id: r.id,
+        floor: Number(r.floor) as 2 | 3,
+        number: Number(r.number),
+        inspection: {
+          chair: r.chair as Status,
+          light: r.light as Status,
+          lampShade: r.lampShade as Status,
+          others: r.others ?? '',
+        },
+        lastUpdated: r.lastUpdated ? Number(r.lastUpdated) : undefined,
+      }));
+      setSeats(loaded);
+      setReport(null);
+      alert(`${loaded.length}개 좌석 데이터를 불러왔습니다.`);
+    } catch {
+      alert('불러오기 중 오류가 발생했습니다.');
+    } finally {
+      setSyncing(null);
+    }
+  };
 
   const handleExport = () => {
     if (!report) return;
@@ -216,6 +261,12 @@ const App: React.FC = () => {
             <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={handleLoadFromSheet} disabled={syncing !== null} className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-4 py-2 rounded-xl font-black hover:bg-green-500 hover:text-white transition-all disabled:opacity-40">
+              {syncing === 'load' ? '불러오는 중...' : '시트 불러오기'}
+            </button>
+            <button onClick={handleSaveToSheet} disabled={syncing !== null} className="text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-4 py-2 rounded-xl font-black hover:bg-yellow-500 hover:text-white transition-all disabled:opacity-40">
+              {syncing === 'save' ? '저장 중...' : '시트에 저장'}
+            </button>
             <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
             <button onClick={() => importRef.current?.click()} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-4 py-2 rounded-xl font-black hover:bg-blue-500 hover:text-white transition-all">엑셀 가져오기</button>
             <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
