@@ -15,6 +15,8 @@ const App: React.FC = () => {
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
   const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const [syncing, setSyncing] = useState<'save' | null>(null);
+  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrZf68AmrHEaONIN6uXHbOz-cFljza3K6MEYYrf6XIgbSi4luYQ_fDf5t4zMNVF3xT/exec';
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -83,6 +85,33 @@ const App: React.FC = () => {
   };
 
   const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
+
+  const handleSaveToSheet = async () => {
+    if (!report) return;
+    setSyncing('save');
+    try {
+      const rows = report.map(r => ({
+        층: `${r.floor}층`,
+        좌석: `${r.number}번`,
+        점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
+        의자: STATUS_KO[r.chair] ?? r.chair,
+        조명: STATUS_KO[r.light] ?? r.light,
+        전등갓: STATUS_KO[r.lampShade] ?? r.lampShade,
+        비고: r.others,
+      }));
+      await fetch(SHEET_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ rows }),
+      });
+      alert('리포트가 시트에 저장되었습니다.');
+    } catch {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setSyncing(null);
+    }
+  };
 
   const handleExport = () => {
     if (!report) return;
@@ -271,12 +300,21 @@ const App: React.FC = () => {
           <div className="bg-white p-8 rounded-3xl border-2 border-slate-900 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black">점검 결과 리포트</h2>
-              <button
-                onClick={handleExport}
-                className="text-sm bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-emerald-700 transition-all active:scale-95"
-              >
-                엑셀 내보내기
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleSaveToSheet}
+                  disabled={syncing !== null}
+                  className="text-sm bg-yellow-500 text-white px-5 py-2.5 rounded-xl font-black hover:bg-yellow-600 transition-all active:scale-95 disabled:opacity-40"
+                >
+                  {syncing === 'save' ? '저장 중...' : '시트에 저장'}
+                </button>
+                <button
+                  onClick={handleExport}
+                  className="text-sm bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-emerald-700 transition-all active:scale-95"
+                >
+                  엑셀 내보내기
+                </button>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left border-collapse">
