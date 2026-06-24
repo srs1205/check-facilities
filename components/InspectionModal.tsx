@@ -52,7 +52,15 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
             <h2 className="text-xl font-black">{seat.floor}층 {seat.number}번 좌석</h2>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inspection Panel</p>
           </div>
-          <button onClick={handleClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { if (window.confirm('이 좌석의 점검 내용을 초기화할까요?')) { onSave({ chair: 'pending', light: 'pending', lampShade: 'pending', sticker: 'pending', others: '' }, false); } }}
+              className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-lg font-black hover:bg-red-500 hover:text-white transition-all"
+            >
+              좌석 초기화
+            </button>
+            <button onClick={handleClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
+          </div>
         </div>
 
         <div className="p-6 space-y-5">
