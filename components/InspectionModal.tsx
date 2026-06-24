@@ -4,7 +4,7 @@ import { Seat, Status, InspectionData } from '../types';
 
 interface Props {
   seat: Seat;
-  onSave: (data: InspectionData, onHold: boolean) => void;
+  onSave: (data: InspectionData) => void;
   onClose: () => void;
 }
 
@@ -44,6 +44,12 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
     onClose();
   };
 
+  const handleReset = () => {
+    if (window.confirm('이 좌석의 점검 내용을 초기화할까요?')) {
+      onSave({ chair: 'pending', light: 'pending', lampShade: 'pending', sticker: 'pending', others: '' });
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
       <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl">
@@ -52,15 +58,7 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
             <h2 className="text-xl font-black">{seat.floor}층 {seat.number}번 좌석</h2>
             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Inspection Panel</p>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => { if (window.confirm('이 좌석의 점검 내용을 초기화할까요?')) { onSave({ chair: 'pending', light: 'pending', lampShade: 'pending', sticker: 'pending', others: '' }, false); } }}
-              className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-3 py-1.5 rounded-lg font-black hover:bg-red-500 hover:text-white transition-all"
-            >
-              좌석 초기화
-            </button>
-            <button onClick={handleClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
-          </div>
+          <button onClick={handleClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
         </div>
 
         <div className="p-6 space-y-5">
@@ -101,13 +99,13 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
 
           <div className="flex gap-3">
             <button
-              onClick={() => onSave(data, true)}
-              className="flex-1 py-4 bg-slate-200 text-slate-700 rounded-2xl font-black hover:bg-slate-300 active:scale-95 transition-all"
+              onClick={handleReset}
+              className="flex-1 py-4 bg-slate-200 text-slate-600 rounded-2xl font-black hover:bg-slate-300 active:scale-95 transition-all"
             >
-              점검 보류
+              초기화
             </button>
             <button
-              onClick={() => onSave(data, false)}
+              onClick={() => onSave(data)}
               className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
             >
               점검 완료
