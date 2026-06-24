@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [syncing, setSyncing] = useState<'save' | null>(null);
-  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrZf68AmrHEaONIN6uXHbOz-cFljza3K6MEYYrf6XIgbSi4luYQ_fDf5t4zMNVF3xT/exec';
+  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwDJnVcVj53riC4NbFVJ_PtEWGnpp-QE4ks1YWdYpulSvwyXhOP656d6PrRo9KSfEPT/exec';
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
