@@ -1,10 +1,11 @@
 
-export type Status = 'pending' | 'ok' | 'issue';
+export type Status = 'pending' | 'ok' | 'issue' | 'hold';
 
 export interface InspectionData {
   chair: Status;
   light: Status;
   lampShade: Status;
+  sticker: Status;
   others: string;
 }
 

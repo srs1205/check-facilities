@@ -5,61 +5,69 @@ import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './con
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
 
+type ReportFilter = 'issue' | 'issueAndHold' | 'all';
+
+type ReportRow = {
+  floor: number; number: number; updatedAt: number;
+  chair: string; light: string; lampShade: string; sticker: string; others: string;
+};
+
+const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검', hold: '보류' };
+const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending', 보류: 'hold' };
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwDJnVcVj53riC4NbFVJ_PtEWGnpp-QE4ks1YWdYpulSvwyXhOP656d6PrRo9KSfEPT/exec';
+
+const getSeatStatus = (seat: Seat): Status => {
+  const { chair, light, lampShade, sticker } = seat.inspection;
+  const vals = [chair, light, lampShade, sticker ?? 'pending'];
+  if (vals.some(v => v === 'issue')) return 'issue';
+  if (vals.some(v => v === 'hold')) return 'hold';
+  if (vals.every(v => v === 'ok')) return 'ok';
+  return 'pending';
+};
 
 const App: React.FC = () => {
   const [seats, setSeats] = useState<Seat[]>(() => {
-    const saved = localStorage.getItem('inspection_data_v5');
-    return saved ? JSON.parse(saved) : INITIAL_SEATS;
+    const saved = localStorage.getItem('inspection_data_v6') || localStorage.getItem('inspection_data_v5');
+    if (saved) {
+      try {
+        return JSON.parse(saved).map((s: Seat) => ({
+          ...s,
+          inspection: { ...s.inspection, sticker: (s.inspection as any).sticker ?? 'pending' }
+        }));
+      } catch { return INITIAL_SEATS; }
+    }
+    return INITIAL_SEATS;
   });
   const [currentFloor, setCurrentFloor] = useState<2 | 3>(2);
   const [selectedSeatId, setSelectedSeatId] = useState<string | null>(null);
-  const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
+  const [report, setReport] = useState<ReportRow[] | null>(null);
+  const [reportFilter, setReportFilter] = useState<ReportFilter>('issue');
+  const [zoom, setZoom] = useState(1);
+  const [syncing, setSyncing] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
-  const [syncing, setSyncing] = useState<'save' | null>(null);
-  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwDJnVcVj53riC4NbFVJ_PtEWGnpp-QE4ks1YWdYpulSvwyXhOP656d6PrRo9KSfEPT/exec';
 
   useEffect(() => {
-    localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
+    localStorage.setItem('inspection_data_v6', JSON.stringify(seats));
   }, [seats]);
 
   const stats = useMemo(() => {
     const floorSeats = seats.filter(s => s.floor === currentFloor);
-    const checked = floorSeats.filter(s => 
-      s.inspection.chair !== 'pending' || 
-      s.inspection.light !== 'pending' || 
-      s.inspection.lampShade !== 'pending'
-    ).length;
-    const issues = floorSeats.filter(s => 
-      s.inspection.chair === 'issue' || 
-      s.inspection.light === 'issue' || 
-      s.inspection.lampShade === 'issue'
-    ).length;
-    return { checked, issues, total: floorSeats.length };
+    const checked = floorSeats.filter(s => getSeatStatus(s) !== 'pending').length;
+    const issues = floorSeats.filter(s => getSeatStatus(s) === 'issue').length;
+    const holds = floorSeats.filter(s => getSeatStatus(s) === 'hold').length;
+    return { checked, issues, holds, total: floorSeats.length };
   }, [seats, currentFloor]);
 
-  const seatMap = useMemo(() => {
-    return new Map(seats.map(seat => [`${seat.floor}-${seat.number}`, seat]));
-  }, [seats]);
+  const seatMap = useMemo(() => new Map(seats.map(s => [`${s.floor}-${s.number}`, s])), [seats]);
 
   const updateSeat = (id: string, data: InspectionData) => {
-    setSeats(prev => prev.map(s => s.id === id ? { 
-      ...s, 
-      inspection: data, 
-      lastUpdated: Date.now() 
-    } : s));
-  };
-
-  const handleSeatClick = (seat: Seat) => {
-    setSelectedSeatId(seat.id);
-  };
-
-  const handleModalClose = () => {
-    setSelectedSeatId(null);
+    setSeats(prev => prev.map(s => s.id === id ? { ...s, inspection: data, lastUpdated: Date.now() } : s));
   };
 
   const handleReset = () => {
     if (window.confirm('모든 점검 데이터를 초기화하시겠습니까?')) {
       setSeats(INITIAL_SEATS);
+      localStorage.removeItem('inspection_data_v6');
       localStorage.removeItem('inspection_data_v5');
       setReport(null);
       setSelectedSeatId(null);
@@ -67,24 +75,28 @@ const App: React.FC = () => {
   };
 
   const handleGenerateReport = () => {
-    const issueSeats = seats.filter(s => getSeatStatus(s) === 'issue');
-    if (issueSeats.length === 0) {
-      alert('발견된 이상 항목이 없습니다.');
-      return;
+    let filtered: Seat[];
+    if (reportFilter === 'issue') {
+      filtered = seats.filter(s => getSeatStatus(s) === 'issue');
+      if (filtered.length === 0) { alert('발견된 이상 항목이 없습니다.'); return; }
+    } else if (reportFilter === 'issueAndHold') {
+      filtered = seats.filter(s => getSeatStatus(s) === 'issue' || getSeatStatus(s) === 'hold');
+      if (filtered.length === 0) { alert('이상 또는 보류 항목이 없습니다.'); return; }
+    } else {
+      filtered = seats.filter(s => getSeatStatus(s) !== 'pending');
+      if (filtered.length === 0) { alert('점검된 항목이 없습니다.'); return; }
     }
-    setReport(issueSeats.map(s => ({
-      floor: s.floor,
-      number: s.number,
-      updatedAt: s.lastUpdated ?? Date.now(),
-      chair: s.inspection.chair,
-      light: s.inspection.light,
-      lampShade: s.inspection.lampShade,
-      others: s.inspection.others ?? '',
-    })));
+    setReport(filtered
+      .sort((a, b) => a.floor - b.floor || a.number - b.number)
+      .map(s => ({
+        floor: s.floor, number: s.number,
+        updatedAt: s.lastUpdated ?? Date.now(),
+        chair: s.inspection.chair, light: s.inspection.light,
+        lampShade: s.inspection.lampShade, sticker: s.inspection.sticker ?? 'pending',
+        others: s.inspection.others ?? '',
+      })));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
   };
-
-  const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
 
   const handleSaveToSheet = async () => {
     if (!report) return;
@@ -94,20 +106,17 @@ const App: React.FC = () => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const stamp = `${String(now.getFullYear()).slice(2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
     const sheetName = `점검결과 ${stamp}${name}`;
-    setSyncing('save');
+    setSyncing(true);
     try {
       const rows = report.map(r => ({
-        층: `${r.floor}층`,
-        좌석: `${r.number}번`,
+        층: `${r.floor}층`, 좌석: `${r.number}번`,
         점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
-        의자: STATUS_KO[r.chair] ?? r.chair,
-        조명: STATUS_KO[r.light] ?? r.light,
-        전등갓: STATUS_KO[r.lampShade] ?? r.lampShade,
+        의자: STATUS_KO[r.chair], 조명: STATUS_KO[r.light],
+        전등갓: STATUS_KO[r.lampShade], 스티커: STATUS_KO[r.sticker] ?? r.sticker,
         비고: r.others,
       }));
       await fetch(SHEET_URL, {
-        method: 'POST',
-        mode: 'no-cors',
+        method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ rows, sheetName }),
       });
@@ -115,23 +124,21 @@ const App: React.FC = () => {
     } catch {
       alert('저장 중 오류가 발생했습니다.');
     } finally {
-      setSyncing(null);
+      setSyncing(false);
     }
   };
 
   const handleExport = () => {
     if (!report) return;
     const rows = report.map(r => ({
-      층: `${r.floor}층`,
-      좌석: `${r.number}번`,
+      층: `${r.floor}층`, 좌석: `${r.number}번`,
       점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
-      의자: STATUS_KO[r.chair] ?? r.chair,
-      조명: STATUS_KO[r.light] ?? r.light,
-      전등갓: STATUS_KO[r.lampShade] ?? r.lampShade,
+      의자: STATUS_KO[r.chair], 조명: STATUS_KO[r.light],
+      전등갓: STATUS_KO[r.lampShade], 스티커: STATUS_KO[r.sticker] ?? r.sticker,
       비고: r.others,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [10, 8, 20, 8, 8, 8, 30].map(w => ({ wch: w }));
+    ws['!cols'] = [10, 8, 20, 8, 8, 8, 8, 30].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '점검결과');
     XLSX.writeFile(wb, `점검결과_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`);
@@ -144,9 +151,7 @@ const App: React.FC = () => {
     reader.onload = (ev) => {
       try {
         const wb = XLSX.read(ev.target?.result, { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(ws);
-        const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
+        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(wb.Sheets[wb.SheetNames[0]]);
         setSeats(prev => {
           const next = [...prev];
           rows.forEach(row => {
@@ -160,6 +165,7 @@ const App: React.FC = () => {
                 chair: KO_STATUS[row['의자']] ?? next[idx].inspection.chair,
                 light: KO_STATUS[row['조명']] ?? next[idx].inspection.light,
                 lampShade: KO_STATUS[row['전등갓']] ?? next[idx].inspection.lampShade,
+                sticker: KO_STATUS[row['스티커']] ?? next[idx].inspection.sticker ?? 'pending',
                 others: row['비고'] ?? next[idx].inspection.others,
               },
               lastUpdated: Date.now(),
@@ -169,55 +175,45 @@ const App: React.FC = () => {
         });
         setReport(null);
         alert(`${rows.length}개 좌석 데이터가 반영되었습니다.`);
-      } catch {
-        alert('파일을 읽는 중 오류가 발생했습니다.');
-      }
+      } catch { alert('파일을 읽는 중 오류가 발생했습니다.'); }
     };
     reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
-  const getSeatStatus = (seat: Seat): Status => {
-    const { chair, light, lampShade } = seat.inspection;
-    if (chair === 'issue' || light === 'issue' || lampShade === 'issue') return 'issue';
-    if (chair === 'ok' && light === 'ok' && lampShade === 'ok') return 'ok';
-    return 'pending';
-  };
+  const cell = Math.round(44 * zoom);
 
   const renderBlock = (item: SeatLayoutItem) => {
     if (item.type === 'label') {
       return (
         <div
           key={item.id}
-          style={{ gridColumnStart: item.col, gridColumnEnd: `span ${item.cols}`, gridRowStart: item.row, gridRowEnd: `span ${item.rows}` }}
-          className="flex items-center justify-center text-slate-400 font-black text-2xl tracking-widest"
+          style={{ gridColumnStart: item.col, gridColumnEnd: `span ${item.cols}`, gridRowStart: item.row, gridRowEnd: `span ${item.rows}`, fontSize: Math.round(24 * zoom) }}
+          className="flex items-center justify-center text-slate-400 font-black tracking-widest"
         >
           {item.text}
         </div>
       );
     }
-
     const maxCols = Math.max(...item.seats.map(row => row.length));
+    const gap = Math.max(2, Math.round(4 * zoom));
     return (
       <div
         key={item.id}
-        style={{ gridColumnStart: item.col, gridColumnEnd: `span ${maxCols}`, gridRowStart: item.row, gridRowEnd: `span ${item.seats.length}` }}
-        className="grid gap-1 border border-slate-300 bg-slate-100/80 p-1.5 rounded-lg shadow-sm"
+        style={{ gridColumnStart: item.col, gridColumnEnd: `span ${maxCols}`, gridRowStart: item.row, gridRowEnd: `span ${item.seats.length}`, display: 'grid', gap, padding: Math.max(2, Math.round(6 * zoom)), border: '1px solid #cbd5e1', background: 'rgba(241,245,249,0.8)', borderRadius: 8 }}
       >
         {item.seats.map((row, rowIdx) => (
-          <div key={`${item.id}-row-${rowIdx}`} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
+          <div key={`${item.id}-row-${rowIdx}`} style={{ display: 'grid', gridTemplateColumns: `repeat(${row.length}, ${cell}px)`, gap }}>
             {row.map(number => {
               const seat = seatMap.get(`${currentFloor}-${number}`);
-              if (!seat) {
-                return (
-                  <div key={`${item.id}-${number}`} className="w-10 h-10 sm:w-11 sm:h-11" />
-                );
-              }
+              if (!seat) return <div key={`${item.id}-${number}`} style={{ width: cell, height: cell }} />;
+              const status = getSeatStatus(seat);
               return (
                 <button
                   key={seat.id}
-                  onClick={() => handleSeatClick(seat)}
-                  className={`w-10 h-10 sm:w-11 sm:h-11 text-[11px] font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[getSeatStatus(seat)]}`}
+                  onClick={() => setSelectedSeatId(seat.id)}
+                  style={{ width: cell, height: cell, fontSize: Math.max(9, Math.round(11 * zoom)) }}
+                  className={`font-black border transition-all active:scale-90 flex items-center justify-center rounded ${ISSUE_COLORS[status]}`}
                 >
                   {seat.number}
                 </button>
@@ -230,20 +226,31 @@ const App: React.FC = () => {
   };
 
   const renderMap = () => (
-    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[560px]">
-      <div className="relative grid grid-cols-[repeat(24,44px)] auto-rows-[44px] gap-3 p-6 min-w-fit">
+    <div className="bg-white rounded-3xl border-4 border-slate-200 overflow-auto scrollbar-hide min-h-[400px]">
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(24, ${cell}px)`,
+          gridAutoRows: `${cell}px`,
+          gap: Math.max(4, Math.round(12 * zoom)),
+          padding: Math.round(24 * zoom),
+          position: 'relative',
+          minWidth: 'fit-content',
+        }}
+      >
         {SEAT_LAYOUTS[currentFloor].map(renderBlock)}
       </div>
     </div>
   );
 
-  const selectedSeat = useMemo(() => 
-    seats.find(s => s.id === selectedSeatId), 
-    [seats, selectedSeatId]
-  );
+  const selectedSeat = useMemo(() => seats.find(s => s.id === selectedSeatId), [seats, selectedSeatId]);
+
+  const statusColor: Record<string, string> = {
+    issue: 'text-red-500', hold: 'text-slate-500', ok: 'text-blue-500', pending: 'text-slate-400',
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-36">
+    <div className="min-h-screen bg-slate-50 pb-44">
       <header className="sticky top-0 z-50 bg-slate-900 text-white px-6 py-4 shadow-xl">
         <div className="max-w-6xl mx-auto flex justify-between items-center">
           <div>
@@ -275,27 +282,41 @@ const App: React.FC = () => {
 
         {/* Stats Row */}
         <div className="bg-white p-4 rounded-2xl border border-slate-200 flex justify-between items-center px-8 shadow-sm">
-           <div className="flex gap-8">
-              <div className="text-center">
-                 <p className="text-[10px] font-black text-slate-400">점검완료</p>
-                 <p className="text-lg font-black text-blue-600">{stats.checked}</p>
-              </div>
-              <div className="text-center">
-                 <p className="text-[10px] font-black text-slate-400">이상발견</p>
-                 <p className="text-lg font-black text-red-500">{stats.issues}</p>
-              </div>
-           </div>
-           <div className="text-right">
-              <p className="text-[10px] font-black text-slate-400">전체 진행률</p>
-              <p className="text-lg font-black text-slate-800">{Math.round((stats.checked/stats.total)*100)}%</p>
-           </div>
+          <div className="flex gap-8">
+            <div className="text-center">
+              <p className="text-[10px] font-black text-slate-400">점검완료</p>
+              <p className="text-lg font-black text-blue-600">{stats.checked}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-black text-slate-400">이상발견</p>
+              <p className="text-lg font-black text-red-500">{stats.issues}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[10px] font-black text-slate-400">보류</p>
+              <p className="text-lg font-black text-slate-400">{stats.holds}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] font-black text-slate-400">전체 진행률</p>
+            <p className="text-lg font-black text-slate-800">{Math.round((stats.checked / stats.total) * 100)}%</p>
+          </div>
         </div>
 
         {/* Legend */}
         <div className="flex gap-4 justify-center text-[10px] font-black text-slate-400 uppercase tracking-tighter">
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-300 rounded"></div> 미점검</div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded"></div> 정상</div>
-          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded"></div> 이상발생</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-300 rounded" /> 미점검</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded" /> 정상</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded" /> 이상</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-400 rounded" /> 보류</div>
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="flex justify-end items-center gap-2">
+          <span className="text-[10px] font-black text-slate-400">지도 크기</span>
+          <button onClick={() => setZoom(z => Math.max(0.5, parseFloat((z - 0.1).toFixed(1))))} className="w-8 h-8 bg-white border border-slate-200 rounded-lg font-black text-slate-600 hover:bg-slate-100 transition-all">−</button>
+          <span className="text-xs font-black text-slate-600 w-10 text-center">{Math.round(zoom * 100)}%</span>
+          <button onClick={() => setZoom(z => Math.min(2, parseFloat((z + 0.1).toFixed(1))))} className="w-8 h-8 bg-white border border-slate-200 rounded-lg font-black text-slate-600 hover:bg-slate-100 transition-all">＋</button>
+          <button onClick={() => setZoom(1)} className="text-[10px] font-black text-slate-400 hover:text-slate-700 px-2">초기화</button>
         </div>
 
         {/* Map Layout */}
@@ -307,17 +328,10 @@ const App: React.FC = () => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black">점검 결과 리포트</h2>
               <div className="flex gap-3">
-                <button
-                  onClick={handleSaveToSheet}
-                  disabled={syncing !== null}
-                  className="text-sm bg-yellow-500 text-white px-5 py-2.5 rounded-xl font-black hover:bg-yellow-600 transition-all active:scale-95 disabled:opacity-40"
-                >
-                  {syncing === 'save' ? '저장 중...' : '시트에 저장'}
+                <button onClick={handleSaveToSheet} disabled={syncing} className="text-sm bg-yellow-500 text-white px-5 py-2.5 rounded-xl font-black hover:bg-yellow-600 transition-all active:scale-95 disabled:opacity-40">
+                  {syncing ? '저장 중...' : '시트에 저장'}
                 </button>
-                <button
-                  onClick={handleExport}
-                  className="text-sm bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-emerald-700 transition-all active:scale-95"
-                >
+                <button onClick={handleExport} className="text-sm bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black hover:bg-emerald-700 transition-all active:scale-95">
                   엑셀 내보내기
                 </button>
               </div>
@@ -326,7 +340,7 @@ const App: React.FC = () => {
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓', '비고'].map(h => (
+                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓', '스티커', '비고'].map(h => (
                       <th key={h} className="px-4 py-3 font-black">{h}</th>
                     ))}
                   </tr>
@@ -337,8 +351,8 @@ const App: React.FC = () => {
                       <td className="px-4 py-2 font-bold">{row.floor}층</td>
                       <td className="px-4 py-2 font-bold">{row.number}번</td>
                       <td className="px-4 py-2 text-slate-500">{new Date(row.updatedAt).toLocaleString('ko-KR')}</td>
-                      {[row.chair, row.light, row.lampShade].map((s, j) => (
-                        <td key={j} className={`px-4 py-2 font-bold ${s === 'issue' ? 'text-red-500' : 'text-blue-500'}`}>
+                      {[row.chair, row.light, row.lampShade, row.sticker].map((s, j) => (
+                        <td key={j} className={`px-4 py-2 font-bold ${statusColor[s] ?? ''}`}>
                           {STATUS_KO[s] ?? s}
                         </td>
                       ))}
@@ -352,27 +366,37 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Primary Floating Action Button */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-[60]">
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-md px-6 z-[60] space-y-3">
+        {/* Report filter */}
+        <div className="bg-white rounded-2xl border border-slate-200 flex shadow-lg overflow-hidden">
+          {([
+            { val: 'issue',        label: '이상만' },
+            { val: 'issueAndHold', label: '이상+보류' },
+            { val: 'all',          label: '전체' },
+          ] as { val: ReportFilter; label: string }[]).map(({ val, label }) => (
+            <button
+              key={val}
+              onClick={() => setReportFilter(val)}
+              className={`flex-1 py-2 text-xs font-black transition-all ${reportFilter === val ? 'bg-slate-900 text-white' : 'text-slate-400 hover:bg-slate-100'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <button
           onClick={handleGenerateReport}
-          disabled={stats.issues === 0}
-          className={`w-full py-5 rounded-2xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all ${
-            stats.issues === 0
-              ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              : 'bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0'
-          }`}
+          className="w-full py-5 rounded-2xl font-black text-lg shadow-2xl flex items-center justify-center gap-3 transition-all bg-indigo-600 text-white hover:bg-indigo-700 active:translate-y-1 border-b-4 border-indigo-900 active:border-b-0"
         >
           유지보수 리포트 생성
         </button>
       </div>
 
-      {/* Modal */}
       {selectedSeat && (
         <InspectionModal
           seat={selectedSeat}
-          onSave={(data) => { updateSeat(selectedSeat.id, data); setSelectedSeatId(null); }}
-          onClose={handleModalClose}
+          onSave={data => { updateSeat(selectedSeat.id, data); setSelectedSeatId(null); }}
+          onClose={() => setSelectedSeatId(null)}
         />
       )}
     </div>
