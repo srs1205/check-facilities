@@ -15,6 +15,7 @@ export interface Seat {
   number: number;
   inspection: InspectionData;
   lastUpdated?: number;
+  onHold?: boolean;
 }
 
 export interface InspectionSummary {
