@@ -1,5 +1,5 @@
 
-export type Status = 'pending' | 'ok' | 'issue' | 'hold';
+export type Status = 'pending' | 'ok' | 'issue';
 
 export interface InspectionData {
   chair: Status;
@@ -15,7 +15,6 @@ export interface Seat {
   number: number;
   inspection: InspectionData;
   lastUpdated?: number;
-  onHold?: boolean;
 }
 
 export interface InspectionSummary {
