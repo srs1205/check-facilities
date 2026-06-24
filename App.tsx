@@ -18,10 +18,10 @@ const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미�
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwux8CR9BZRp22JmyDAde7KxrN940yc4d5M0lFcMbrcAtHkEbvn5QayKhxWzN3Xk8D7/exec';
 
 const getSeatStatus = (seat: Seat): Status => {
+  if (seat.onHold) return 'hold';
   const { chair, light, lampShade, sticker, others } = seat.inspection;
   const vals = [chair, light, lampShade, sticker ?? 'pending'];
   if (vals.some(v => v === 'issue') || (others && others.trim() !== '')) return 'issue';
-  if (vals.some(v => v === 'hold')) return 'hold';
   if (vals.every(v => v === 'ok')) return 'ok';
   return 'pending';
 };
@@ -62,8 +62,8 @@ const App: React.FC = () => {
 
   const seatMap = useMemo(() => new Map(seats.map(s => [`${s.floor}-${s.number}`, s])), [seats]);
 
-  const updateSeat = (id: string, data: InspectionData) => {
-    setSeats(prev => prev.map(s => s.id === id ? { ...s, inspection: data, lastUpdated: Date.now() } : s));
+  const updateSeat = (id: string, data: InspectionData, onHold: boolean) => {
+    setSeats(prev => prev.map(s => s.id === id ? { ...s, inspection: data, onHold, lastUpdated: Date.now() } : s));
   };
 
   const handleReset = () => {
@@ -400,7 +400,7 @@ const App: React.FC = () => {
       {selectedSeat && (
         <InspectionModal
           seat={selectedSeat}
-          onSave={data => { updateSeat(selectedSeat.id, data); setSelectedSeatId(null); }}
+          onSave={(data, onHold) => { updateSeat(selectedSeat.id, data, onHold); setSelectedSeatId(null); }}
           onClose={() => setSelectedSeatId(null)}
         />
       )}

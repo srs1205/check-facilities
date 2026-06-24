@@ -4,7 +4,7 @@ import { Seat, Status, InspectionData } from '../types';
 
 interface Props {
   seat: Seat;
-  onSave: (data: InspectionData) => void;
+  onSave: (data: InspectionData, onHold: boolean) => void;
   onClose: () => void;
 }
 
@@ -93,13 +93,13 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
 
           <div className="flex gap-3">
             <button
-              onClick={() => onSave({ chair: 'hold', light: 'hold', lampShade: 'hold', sticker: 'hold', others: data.others })}
+              onClick={() => onSave(data, true)}
               className="flex-1 py-4 bg-slate-200 text-slate-700 rounded-2xl font-black hover:bg-slate-300 active:scale-95 transition-all"
             >
               점검 보류
             </button>
             <button
-              onClick={() => onSave(data)}
+              onClick={() => onSave(data, false)}
               className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
             >
               점검 완료
