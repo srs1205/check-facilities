@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './constants';
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
+import ManualModal from './components/ManualModal';
 
 type ReportFilter = 'issue' | 'issueAndHold' | 'all';
 
@@ -44,6 +45,7 @@ const App: React.FC = () => {
   const [reportFilter, setReportFilter] = useState<ReportFilter>('issue');
   const [zoom, setZoom] = useState(1);
   const [syncing, setSyncing] = useState(false);
+  const [showManual, setShowManual] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -258,6 +260,7 @@ const App: React.FC = () => {
             <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">Maintenance Tool</p>
           </div>
           <div className="flex items-center gap-3">
+            <button onClick={() => setShowManual(true)} className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-4 py-2 rounded-xl font-black hover:bg-indigo-500 hover:text-white transition-all">매뉴얼</button>
             <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
             <button onClick={() => importRef.current?.click()} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-4 py-2 rounded-xl font-black hover:bg-blue-500 hover:text-white transition-all">엑셀 가져오기</button>
             <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
@@ -391,6 +394,8 @@ const App: React.FC = () => {
           유지보수 리포트 생성
         </button>
       </div>
+
+      {showManual && <ManualModal onClose={() => setShowManual(false)} />}
 
       {selectedSeat && (
         <InspectionModal
