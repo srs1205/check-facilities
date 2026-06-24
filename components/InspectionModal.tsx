@@ -23,7 +23,7 @@ const LABELS: Record<string, Record<'ok' | 'issue', string>> = {
 const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
   const [data, setData] = useState<InspectionData>(() => {
     const c = seat.inspection;
-    const def = (v: Status): Status => v === 'pending' ? 'ok' : v;
+    const def = (v: Status): Status => (v === 'pending' || v === 'hold') ? 'ok' : v;
     return {
       chair:     def(c.chair),
       light:     def(c.light),
@@ -91,12 +91,20 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
             />
           </div>
 
-          <button
-            onClick={() => onSave(data)}
-            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
-          >
-            점검 완료
-          </button>
+          <div className="flex gap-3">
+            <button
+              onClick={() => onSave({ chair: 'hold', light: 'hold', lampShade: 'hold', sticker: 'hold', others: data.others })}
+              className="flex-1 py-4 bg-slate-200 text-slate-700 rounded-2xl font-black hover:bg-slate-300 active:scale-95 transition-all"
+            >
+              점검 보류
+            </button>
+            <button
+              onClick={() => onSave(data)}
+              className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
+            >
+              점검 완료
+            </button>
+          </div>
         </div>
       </div>
     </div>

@@ -5,21 +5,22 @@ import { INITIAL_SEATS, ISSUE_COLORS, SEAT_LAYOUTS, SeatLayoutItem } from './con
 import { Seat, InspectionData, Status } from './types';
 import InspectionModal from './components/InspectionModal';
 
-type ReportFilter = 'issue' | 'all';
+type ReportFilter = 'issue' | 'issueAndHold' | 'all';
 
 type ReportRow = {
   floor: number; number: number; updatedAt: number;
   chair: string; light: string; lampShade: string; sticker: string; others: string;
 };
 
-const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
-const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
+const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검', hold: '보류' };
+const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending', 보류: 'hold' };
 const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwDJnVcVj53riC4NbFVJ_PtEWGnpp-QE4ks1YWdYpulSvwyXhOP656d6PrRo9KSfEPT/exec';
 
 const getSeatStatus = (seat: Seat): Status => {
-  const { chair, light, lampShade, sticker } = seat.inspection;
+  const { chair, light, lampShade, sticker, others } = seat.inspection;
   const vals = [chair, light, lampShade, sticker ?? 'pending'];
-  if (vals.some(v => v === 'issue')) return 'issue';
+  if (vals.some(v => v === 'issue') || (others && others.trim() !== '')) return 'issue';
+  if (vals.some(v => v === 'hold')) return 'hold';
   if (vals.every(v => v === 'ok')) return 'ok';
   return 'pending';
 };
@@ -53,7 +54,8 @@ const App: React.FC = () => {
     const floorSeats = seats.filter(s => s.floor === currentFloor);
     const checked = floorSeats.filter(s => getSeatStatus(s) !== 'pending').length;
     const issues = floorSeats.filter(s => getSeatStatus(s) === 'issue').length;
-    return { checked, issues, total: floorSeats.length };
+    const holds = floorSeats.filter(s => getSeatStatus(s) === 'hold').length;
+    return { checked, issues, holds, total: floorSeats.length };
   }, [seats, currentFloor]);
 
   const seatMap = useMemo(() => new Map(seats.map(s => [`${s.floor}-${s.number}`, s])), [seats]);
@@ -77,6 +79,9 @@ const App: React.FC = () => {
     if (reportFilter === 'issue') {
       filtered = seats.filter(s => getSeatStatus(s) === 'issue');
       if (filtered.length === 0) { alert('발견된 이상 항목이 없습니다.'); return; }
+    } else if (reportFilter === 'issueAndHold') {
+      filtered = seats.filter(s => getSeatStatus(s) === 'issue' || getSeatStatus(s) === 'hold');
+      if (filtered.length === 0) { alert('이상 또는 보류 항목이 없습니다.'); return; }
     } else {
       filtered = seats.filter(s => getSeatStatus(s) !== 'pending');
       if (filtered.length === 0) { alert('점검된 항목이 없습니다.'); return; }
@@ -241,7 +246,7 @@ const App: React.FC = () => {
   const selectedSeat = useMemo(() => seats.find(s => s.id === selectedSeatId), [seats, selectedSeatId]);
 
   const statusColor: Record<string, string> = {
-    issue: 'text-red-500', ok: 'text-blue-500', pending: 'text-slate-400',
+    issue: 'text-red-500', ok: 'text-blue-500', pending: 'text-slate-400', hold: 'text-slate-400',
   };
 
   return (
@@ -286,6 +291,10 @@ const App: React.FC = () => {
               <p className="text-[10px] font-black text-slate-400">이상발견</p>
               <p className="text-lg font-black text-red-500">{stats.issues}</p>
             </div>
+            <div className="text-center">
+              <p className="text-[10px] font-black text-slate-400">보류</p>
+              <p className="text-lg font-black text-slate-400">{stats.holds}</p>
+            </div>
           </div>
           <div className="text-right">
             <p className="text-[10px] font-black text-slate-400">전체 진행률</p>
@@ -298,6 +307,7 @@ const App: React.FC = () => {
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-white border border-slate-300 rounded" /> 미점검</div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-blue-500 rounded" /> 정상</div>
           <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500 rounded" /> 이상</div>
+          <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-slate-400 rounded" /> 보류</div>
         </div>
 
         {/* Zoom Controls */}
@@ -362,6 +372,7 @@ const App: React.FC = () => {
         <div className="bg-white rounded-2xl border border-slate-200 flex shadow-lg overflow-hidden">
           {([
             { val: 'issue',        label: '이상만' },
+            { val: 'issueAndHold', label: '이상+보류' },
             { val: 'all',          label: '전체' },
           ] as { val: ReportFilter; label: string }[]).map(({ val, label }) => (
             <button
