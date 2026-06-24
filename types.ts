@@ -1,5 +1,5 @@
 
-export type Status = 'pending' | 'ok' | 'issue' | 'hold';
+export type Status = 'pending' | 'ok' | 'issue';
 
 export interface InspectionData {
   chair: Status;

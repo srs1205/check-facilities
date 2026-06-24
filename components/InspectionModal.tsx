@@ -15,16 +15,9 @@ const FIELDS: { key: keyof Omit<InspectionData, 'others'>; label: string }[] = [
   { key: 'sticker',   label: '🔖 번호 스티커' },
 ];
 
-const BTN_STYLES: Record<Status, string> = {
-  pending: 'bg-white border border-slate-300 text-slate-400',
-  ok:      'bg-blue-500 text-white',
-  issue:   'bg-red-500 text-white',
-  hold:    'bg-slate-400 text-white',
-};
-
-const LABELS: Record<string, Record<Status, string>> = {
-  sticker: { pending: '미확인', ok: '부착됨', issue: '미부착', hold: '보류' },
-  default: { pending: '미확인', ok: '정상',   issue: '이상',   hold: '보류' },
+const LABELS: Record<string, Record<'ok' | 'issue', string>> = {
+  sticker: { ok: '부착됨', issue: '미부착' },
+  default: { ok: '정상',   issue: '이상'   },
 };
 
 const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
@@ -35,7 +28,7 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
       chair:     def(c.chair),
       light:     def(c.light),
       lampShade: def(c.lampShade),
-      sticker:   def(c.sticker ?? 'pending'),
+      sticker:   def((c as any).sticker ?? 'pending'),
       others:    c.others || '',
     };
   });
@@ -44,11 +37,6 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
   const set = (field: keyof Omit<InspectionData, 'others'>, val: Status) => {
     setIsTouched(true);
     setData(prev => ({ ...prev, [field]: val }));
-  };
-
-  const setAllHold = () => {
-    setIsTouched(true);
-    setData(prev => ({ ...prev, chair: 'hold', light: 'hold', lampShade: 'hold', sticker: 'hold' }));
   };
 
   const handleClose = () => {
@@ -75,17 +63,18 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
                 <div key={key} className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
                   <p className="font-bold text-slate-700 text-sm mb-2">{label}</p>
                   <div className="flex gap-2">
-                    {(['ok', 'issue', 'hold'] as Status[]).map(s => (
-                      <button
-                        key={s}
-                        onClick={() => set(key, s)}
-                        className={`flex-1 py-2 rounded-xl font-black text-xs transition-all active:scale-95 ${
-                          data[key] === s ? BTN_STYLES[s] : 'bg-white border border-slate-200 text-slate-400'
-                        }`}
-                      >
-                        {lblMap[s]}
-                      </button>
-                    ))}
+                    <button
+                      onClick={() => set(key, 'ok')}
+                      className={`flex-1 py-2 rounded-xl font-black text-xs transition-all active:scale-95 ${data[key] === 'ok' ? 'bg-blue-500 text-white' : 'bg-white border border-slate-200 text-slate-400'}`}
+                    >
+                      {lblMap.ok}
+                    </button>
+                    <button
+                      onClick={() => set(key, 'issue')}
+                      className={`flex-1 py-2 rounded-xl font-black text-xs transition-all active:scale-95 ${data[key] === 'issue' ? 'bg-red-500 text-white' : 'bg-white border border-slate-200 text-slate-400'}`}
+                    >
+                      {lblMap.issue}
+                    </button>
                   </div>
                 </div>
               );
@@ -102,20 +91,12 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
             />
           </div>
 
-          <div className="flex gap-3 pt-2">
-            <button
-              onClick={setAllHold}
-              className="flex-1 py-4 bg-slate-200 text-slate-700 rounded-2xl font-black hover:bg-slate-300 shadow-sm active:scale-95 transition-all"
-            >
-              전체 보류
-            </button>
-            <button
-              onClick={() => onSave(data)}
-              className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
-            >
-              점검 완료
-            </button>
-          </div>
+          <button
+            onClick={() => onSave(data)}
+            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
+          >
+            점검 완료
+          </button>
         </div>
       </div>
     </div>

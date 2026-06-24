@@ -31,14 +31,12 @@ export const STATUS_LABELS = {
   pending: '미점검',
   ok: '정상',
   issue: '이상발생',
-  hold: '보류'
 };
 
 export const ISSUE_COLORS = {
   pending: 'bg-white border-slate-200 text-slate-400',
   ok: 'bg-blue-500 border-blue-600 text-white',
   issue: 'bg-red-500 border-red-600 text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]',
-  hold: 'bg-slate-400 border-slate-500 text-white'
 };
 
 export type SeatLayoutItem =
