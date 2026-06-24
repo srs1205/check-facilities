@@ -16,7 +16,7 @@ const App: React.FC = () => {
   const [report, setReport] = useState<{ floor: number; number: number; updatedAt: number; chair: string; light: string; lampShade: string; others: string }[] | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [syncing, setSyncing] = useState<'save' | null>(null);
-  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbyrZf68AmrHEaONIN6uXHbOz-cFljza3K6MEYYrf6XIgbSi4luYQ_fDf5t4zMNVF3xT/exec';
+  const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwDJnVcVj53riC4NbFVJ_PtEWGnpp-QE4ks1YWdYpulSvwyXhOP656d6PrRo9KSfEPT/exec';
 
   useEffect(() => {
     localStorage.setItem('inspection_data_v5', JSON.stringify(seats));
@@ -88,6 +88,12 @@ const App: React.FC = () => {
 
   const handleSaveToSheet = async () => {
     if (!report) return;
+    const name = window.prompt('생성자 이름을 입력하세요');
+    if (!name) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${String(now.getFullYear()).slice(2)}${pad(now.getMonth() + 1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const sheetName = `점검결과 ${stamp}${name}`;
     setSyncing('save');
     try {
       const rows = report.map(r => ({
@@ -103,9 +109,9 @@ const App: React.FC = () => {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify({ rows, sheetName }),
       });
-      alert('리포트가 시트에 저장되었습니다.');
+      alert(`"${sheetName}" 시트로 저장되었습니다.`);
     } catch {
       alert('저장 중 오류가 발생했습니다.');
     } finally {
