@@ -15,7 +15,7 @@ type ReportRow = {
 
 const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
 const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwpONN481-RHF8NowpWGdLidyWUtjOwu2OrhlAzN2l4l9N3gMLPImSxaLT1Wf4SqwZ_/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxeN_aURTg084lnxxm07SQn4XoBbOcYEDs_ENRi90sl-rLxxhuGtVS_xYkv-m1bDQEq/exec';
 
 const getSeatStatus = (seat: Seat): Status => {
   const { chair, light, lampShade, sticker, others } = seat.inspection;
@@ -139,16 +139,17 @@ const App: React.FC = () => {
       const res = await fetch(`${SHEET_URL}?action=load&sheet=${encodeURIComponent(sheetName)}`);
       const { seats: rows } = await res.json();
       setSeats(prev => prev.map(s => {
-        const row = rows.find((r: any) => r.id === s.id);
+        const row = rows.find((r: any) => Number(r.floor) === s.floor && Number(r.number) === s.number);
         if (!row) return s;
+        const toStatus = (v: any): Status => (['ok','issue','pending'].includes(String(v)) ? String(v) as Status : 'pending');
         return {
           ...s,
           inspection: {
-            chair: row.chair || 'pending',
-            light: row.light || 'pending',
-            lampShade: row.lampShade || 'pending',
-            sticker: row.sticker || 'pending',
-            others: row.others || '',
+            chair: toStatus(row.chair),
+            light: toStatus(row.light),
+            lampShade: toStatus(row.lampShade),
+            sticker: toStatus(row.sticker),
+            others: String(row.others || ''),
           },
           lastUpdated: row.lastUpdated ? Number(row.lastUpdated) : s.lastUpdated,
         };
