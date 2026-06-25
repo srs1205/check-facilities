@@ -45,6 +45,8 @@ const App: React.FC = () => {
   const [zoom, setZoom] = useState(1);
   const [syncing, setSyncing] = useState(false);
   const [showManual, setShowManual] = useState(false);
+  const [sheetList, setSheetList] = useState<string[] | null>(null);
+  const [loadingSheets, setLoadingSheets] = useState(false);
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,6 +95,69 @@ const App: React.FC = () => {
         others: s.inspection.others ?? '',
       })));
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' }), 100);
+  };
+
+  const handleSaveState = async () => {
+    const name = window.prompt('저장자 이름을 입력하세요');
+    if (!name) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const stamp = `${String(now.getFullYear()).slice(2)}${pad(now.getMonth()+1)}${pad(now.getDate())}${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const sheetName = `저장 ${stamp}${name}`;
+    setSyncing(true);
+    try {
+      await fetch(SHEET_URL, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'state', seats, sheetName }),
+      });
+      alert(`"${sheetName}" 으로 저장되었습니다.`);
+    } catch {
+      alert('저장 중 오류가 발생했습니다.');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleOpenLoadPicker = async () => {
+    setLoadingSheets(true);
+    try {
+      const res = await fetch(`${SHEET_URL}?action=list`);
+      const list: string[] = await res.json();
+      if (list.length === 0) { alert('불러올 수 있는 저장 내역이 없습니다.'); return; }
+      setSheetList(list);
+    } catch {
+      alert('목록을 불러오지 못했습니다.');
+    } finally {
+      setLoadingSheets(false);
+    }
+  };
+
+  const handleLoadState = async (sheetName: string) => {
+    setSheetList(null);
+    try {
+      const res = await fetch(`${SHEET_URL}?action=load&sheet=${encodeURIComponent(sheetName)}`);
+      const { seats: rows } = await res.json();
+      setSeats(prev => prev.map(s => {
+        const row = rows.find((r: any) => r.id === s.id);
+        if (!row) return s;
+        return {
+          ...s,
+          inspection: {
+            chair: row.chair || 'pending',
+            light: row.light || 'pending',
+            lampShade: row.lampShade || 'pending',
+            sticker: row.sticker || 'pending',
+            others: row.others || '',
+          },
+          lastUpdated: row.lastUpdated ? Number(row.lastUpdated) : s.lastUpdated,
+        };
+      }));
+      setReport(null);
+      alert(`"${sheetName}" 데이터를 불러왔습니다.`);
+    } catch {
+      alert('불러오기 중 오류가 발생했습니다.');
+    }
   };
 
   const handleSaveToSheet = async () => {
@@ -256,6 +321,8 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-3">
             <button onClick={() => setShowManual(true)} className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-4 py-2 rounded-xl font-black hover:bg-indigo-500 hover:text-white transition-all">매뉴얼</button>
+            <button onClick={handleSaveState} disabled={syncing} className="text-[10px] bg-green-500/10 text-green-400 border border-green-500/20 px-4 py-2 rounded-xl font-black hover:bg-green-500 hover:text-white transition-all disabled:opacity-40">전체 저장</button>
+            <button onClick={handleOpenLoadPicker} disabled={loadingSheets} className="text-[10px] bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-4 py-2 rounded-xl font-black hover:bg-yellow-500 hover:text-white transition-all disabled:opacity-40">{loadingSheets ? '로딩...' : '불러오기'}</button>
             <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={handleImport} />
             <button onClick={() => importRef.current?.click()} className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-4 py-2 rounded-xl font-black hover:bg-blue-500 hover:text-white transition-all">엑셀 가져오기</button>
             <button onClick={handleReset} className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-xl font-black hover:bg-red-500 hover:text-white transition-all">초기화</button>
@@ -385,6 +452,28 @@ const App: React.FC = () => {
       </div>
 
       {showManual && <ManualModal onClose={() => setShowManual(false)} />}
+
+      {sheetList && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl">
+            <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
+              <h2 className="text-lg font-black">불러올 저장 내역 선택</h2>
+              <button onClick={() => setSheetList(null)} className="p-2 hover:bg-slate-800 rounded-full transition-colors">✕</button>
+            </div>
+            <div className="p-4 space-y-2 max-h-80 overflow-y-auto">
+              {sheetList.map(name => (
+                <button
+                  key={name}
+                  onClick={() => handleLoadState(name)}
+                  className="w-full text-left px-4 py-3 bg-slate-50 hover:bg-indigo-50 hover:text-indigo-700 rounded-2xl font-bold text-sm transition-all border border-slate-200 hover:border-indigo-300"
+                >
+                  {name.replace('저장 ', '')}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedSeat && (
         <InspectionModal
