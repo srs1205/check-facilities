@@ -46,7 +46,10 @@ const StudentGuide: React.FC = () => (
       <p className="text-xs font-black text-indigo-500 uppercase tracking-widest mb-3">이것만 하면 됩니다</p>
       <div className="space-y-5">
         <Step num={1} title="사이트 접속">
-          브라우저에서 <span className="font-black text-slate-800">check-facilities.vercel.app</span> 으로 접속합니다.
+          <span className="font-black text-slate-800">크롬(Chrome) 브라우저</span>에서 <span className="font-black text-slate-800">check-facilities.vercel.app</span> 으로 접속합니다.
+          <div className="mt-2">
+            <Tip>카카오톡 링크로 열면 일부 기능이 불안정할 수 있어요. 링크를 복사한 뒤 크롬에서 직접 열어주세요.</Tip>
+          </div>
         </Step>
         <Step num={2} title="이전 작업 이어받기 (첫 번째 사람이면 건너뜀)">
           오른쪽 위 <span className="font-black">불러오기</span> 버튼을 누르고, 목록에서 <span className="font-black">가장 최근</span> 것을 선택합니다.
