@@ -109,7 +109,7 @@ const App: React.FC = () => {
       await fetch(SHEET_URL, {
         method: 'POST', mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'state', seats, sheetName }),
+        body: JSON.stringify({ action: 'state', seats: seats.filter(s => getSeatStatus(s) !== 'pending'), sheetName }),
       });
       alert(`"${sheetName}" 으로 저장되었습니다.`);
     } catch {
