@@ -24,9 +24,10 @@ export default async function handler(req: Request) {
 
     const ai = new GoogleGenAI({ apiKey });
     
-    const issuesOnly = seats.filter((s: Seat) => 
-      s.inspection.chair === 'issue' || 
-      s.inspection.light === 'issue' || 
+    const issuesOnly = seats.filter((s: Seat) =>
+      s.inspection.chair === 'issue' ||
+      s.inspection.lightPower === 'issue' ||
+      s.inspection.lightDetach === 'issue' ||
       s.inspection.lampShade === 'issue' ||
       s.inspection.others.trim().length > 0
     );
@@ -40,7 +41,8 @@ export default async function handler(req: Request) {
         location: `${s.floor}층 ${s.number}번 좌석`,
         issues: {
           chair: s.inspection.chair,
-          light: s.inspection.light,
+          lightPower: s.inspection.lightPower,
+          lightDetach: s.inspection.lightDetach,
           lampShade: s.inspection.lampShade,
           notes: s.inspection.others
         }

@@ -63,7 +63,7 @@ const StudentGuide: React.FC = () => (
         <Step num={4} title="좌석 점검">
           지도에서 좌석 번호를 탭하면 점검 창이 열립니다.
           <ul className="mt-2 space-y-1 list-none">
-            <li>→ 의자·조명·전등 갓·번호 스티커 각각 <span className="font-black text-blue-600">정상</span> 또는 <span className="font-black text-red-500">이상</span> 선택</li>
+            <li>→ 의자·조명 전원·조명 탈착·전등 갓·번호 스티커 각각 <span className="font-black text-blue-600">정상</span> 또는 <span className="font-black text-red-500">이상</span> 선택</li>
             <li>→ 추가로 적을 내용이 있으면 <span className="font-black">기타 비고</span>에 메모</li>
             <li>→ <span className="font-black">점검 완료</span> 버튼으로 저장</li>
           </ul>
@@ -120,7 +120,7 @@ const StudentGuide: React.FC = () => (
           </div>
           <div className="flex gap-2 items-start">
             <span className="font-black text-red-500 flex-shrink-0">이상</span>
-            <span>의자 파손, 조명 불량, 전등 갓 파손, 스티커 없음 등 문제가 있는 경우</span>
+            <span>의자 파손, 조명 전원 불량, 조명 탈착(빠짐), 전등 갓 파손, 스티커 없음 등 문제가 있는 경우</span>
           </div>
           <div className="flex gap-2 items-start">
             <span className="font-black text-slate-600 flex-shrink-0">초기화</span>
@@ -167,11 +167,12 @@ const AdvancedManual: React.FC = () => (
       <pre className="bg-slate-900 text-green-400 p-4 rounded-xl text-xs overflow-x-auto leading-relaxed">{`type Status = 'pending' | 'ok' | 'issue';
 
 interface InspectionData {
-  chair: Status;      // 의자 상태
-  light: Status;      // 조명 상태
-  lampShade: Status;  // 전등 갓 상태
-  sticker: Status;    // 번호 스티커 부착 여부
-  others: string;     // 기타 비고
+  chair: Status;        // 의자 상태
+  lightPower: Status;   // 조명 전원
+  lightDetach: Status;  // 조명 탈착
+  lampShade: Status;    // 전등 갓 상태
+  sticker: Status;      // 번호 스티커 부착 여부
+  others: string;       // 기타 비고
 }
 
 interface Seat {

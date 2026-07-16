@@ -13,7 +13,8 @@ const generateSeatsForFloor = (floor: 2 | 3, count: number): Seat[] => {
       number,
       inspection: {
         chair: 'pending',
-        light: 'pending',
+        lightPower: 'pending',
+        lightDetach: 'pending',
         lampShade: 'pending',
         sticker: 'pending',
         others: ''

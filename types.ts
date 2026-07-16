@@ -3,7 +3,8 @@ export type Status = 'pending' | 'ok' | 'issue';
 
 export interface InspectionData {
   chair: Status;
-  light: Status;
+  lightPower: Status;
+  lightDetach: Status;
   lampShade: Status;
   sticker: Status;
   others: string;
