@@ -10,16 +10,16 @@ type ReportFilter = 'issue' | 'all';
 
 type ReportRow = {
   floor: number; number: number; updatedAt: number;
-  chair: string; light: string; lampShade: string; sticker: string; others: string;
+  chair: string; lightPower: string; lightDetach: string; lampShade: string; sticker: string; others: string;
 };
 
 const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
 const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxeN_aURTg084lnxxm07SQn4XoBbOcYEDs_ENRi90sl-rLxxhuGtVS_xYkv-m1bDQEq/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwPbCGN0EUQUHNUA3ygd4O1ARzmX2BAAP1twqUKcJ-OvisDaZ0aeir0tC7yfOOqDWqd/exec';
 
 const getSeatStatus = (seat: Seat): Status => {
-  const { chair, light, lampShade, sticker, others } = seat.inspection;
-  const vals = [chair, light, lampShade, sticker ?? 'pending'];
+  const { chair, lightPower, lightDetach, lampShade, sticker, others } = seat.inspection;
+  const vals = [chair, lightPower ?? 'pending', lightDetach ?? 'pending', lampShade, sticker ?? 'pending'];
   if (vals.some(v => v === 'issue') || (others && others.trim() !== '')) return 'issue';
   if (vals.every(v => v === 'ok')) return 'ok';
   return 'pending';
@@ -27,13 +27,23 @@ const getSeatStatus = (seat: Seat): Status => {
 
 const App: React.FC = () => {
   const [seats, setSeats] = useState<Seat[]>(() => {
-    const saved = localStorage.getItem('inspection_data_v6') || localStorage.getItem('inspection_data_v5');
+    const saved = localStorage.getItem('inspection_data_v7') || localStorage.getItem('inspection_data_v6') || localStorage.getItem('inspection_data_v5');
     if (saved) {
       try {
-        return JSON.parse(saved).map((s: Seat) => ({
-          ...s,
-          inspection: { ...s.inspection, sticker: (s.inspection as any).sticker ?? 'pending' }
-        }));
+        return JSON.parse(saved).map((s: Seat) => {
+          const i = s.inspection as any;
+          return {
+            ...s,
+            inspection: {
+              chair: i.chair ?? 'pending',
+              lightPower: i.lightPower ?? i.light ?? 'pending',
+              lightDetach: i.lightDetach ?? i.light ?? 'pending',
+              lampShade: i.lampShade ?? 'pending',
+              sticker: i.sticker ?? 'pending',
+              others: i.others ?? '',
+            },
+          };
+        });
       } catch { return INITIAL_SEATS; }
     }
     return INITIAL_SEATS;
@@ -50,7 +60,7 @@ const App: React.FC = () => {
   const importRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    localStorage.setItem('inspection_data_v6', JSON.stringify(seats));
+    localStorage.setItem('inspection_data_v7', JSON.stringify(seats));
   }, [seats]);
 
   const stats = useMemo(() => {
@@ -69,6 +79,7 @@ const App: React.FC = () => {
   const handleReset = () => {
     if (window.confirm('모든 점검 데이터를 초기화하시겠습니까?')) {
       setSeats(INITIAL_SEATS);
+      localStorage.removeItem('inspection_data_v7');
       localStorage.removeItem('inspection_data_v6');
       localStorage.removeItem('inspection_data_v5');
       setReport(null);
@@ -90,7 +101,9 @@ const App: React.FC = () => {
       .map(s => ({
         floor: s.floor, number: s.number,
         updatedAt: s.lastUpdated ?? Date.now(),
-        chair: s.inspection.chair, light: s.inspection.light,
+        chair: s.inspection.chair,
+        lightPower: s.inspection.lightPower ?? 'pending',
+        lightDetach: s.inspection.lightDetach ?? 'pending',
         lampShade: s.inspection.lampShade, sticker: s.inspection.sticker ?? 'pending',
         others: s.inspection.others ?? '',
       })));
@@ -146,7 +159,8 @@ const App: React.FC = () => {
           ...s,
           inspection: {
             chair: toStatus(row.chair),
-            light: toStatus(row.light),
+            lightPower: toStatus(row.lightPower ?? row.light),
+            lightDetach: toStatus(row.lightDetach ?? row.light),
             lampShade: toStatus(row.lampShade),
             sticker: toStatus(row.sticker),
             others: String(row.others || ''),
@@ -174,7 +188,7 @@ const App: React.FC = () => {
       const rows = report.map(r => ({
         층: `${r.floor}층`, 좌석: `${r.number}번`,
         점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
-        의자: STATUS_KO[r.chair], 조명: STATUS_KO[r.light],
+        의자: STATUS_KO[r.chair], 조명전원: STATUS_KO[r.lightPower], 조명탈착: STATUS_KO[r.lightDetach],
         전등갓: STATUS_KO[r.lampShade], 스티커: STATUS_KO[r.sticker] ?? r.sticker,
         비고: r.others,
       }));
@@ -196,12 +210,12 @@ const App: React.FC = () => {
     const rows = report.map(r => ({
       층: `${r.floor}층`, 좌석: `${r.number}번`,
       점검일시: new Date(r.updatedAt).toLocaleString('ko-KR'),
-      의자: STATUS_KO[r.chair], 조명: STATUS_KO[r.light],
+      의자: STATUS_KO[r.chair], 조명전원: STATUS_KO[r.lightPower], 조명탈착: STATUS_KO[r.lightDetach],
       전등갓: STATUS_KO[r.lampShade], 스티커: STATUS_KO[r.sticker] ?? r.sticker,
       비고: r.others,
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [10, 8, 20, 8, 8, 8, 8, 30].map(w => ({ wch: w }));
+    ws['!cols'] = [10, 8, 20, 8, 8, 8, 8, 8, 30].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '점검결과');
     XLSX.writeFile(wb, `점검결과_${new Date().toLocaleDateString('ko-KR').replace(/\. /g, '-').replace('.', '')}.xlsx`);
@@ -226,7 +240,8 @@ const App: React.FC = () => {
               ...next[idx],
               inspection: {
                 chair: KO_STATUS[row['의자']] ?? next[idx].inspection.chair,
-                light: KO_STATUS[row['조명']] ?? next[idx].inspection.light,
+                lightPower: KO_STATUS[row['조명전원']] ?? KO_STATUS[row['조명']] ?? next[idx].inspection.lightPower,
+                lightDetach: KO_STATUS[row['조명탈착']] ?? KO_STATUS[row['조명']] ?? next[idx].inspection.lightDetach,
                 lampShade: KO_STATUS[row['전등갓']] ?? next[idx].inspection.lampShade,
                 sticker: KO_STATUS[row['스티커']] ?? next[idx].inspection.sticker ?? 'pending',
                 others: row['비고'] ?? next[idx].inspection.others,
@@ -401,7 +416,7 @@ const App: React.FC = () => {
               <table className="w-full text-sm text-left border-collapse">
                 <thead>
                   <tr className="bg-slate-900 text-white">
-                    {['층', '좌석', '점검일시', '의자', '조명', '전등갓', '스티커', '비고'].map(h => (
+                    {['층', '좌석', '점검일시', '의자', '조명전원', '조명탈착', '전등갓', '스티커', '비고'].map(h => (
                       <th key={h} className="px-4 py-3 font-black">{h}</th>
                     ))}
                   </tr>
@@ -412,7 +427,7 @@ const App: React.FC = () => {
                       <td className="px-4 py-2 font-bold">{row.floor}층</td>
                       <td className="px-4 py-2 font-bold">{row.number}번</td>
                       <td className="px-4 py-2 text-slate-500">{new Date(row.updatedAt).toLocaleString('ko-KR')}</td>
-                      {[row.chair, row.light, row.lampShade, row.sticker].map((s, j) => (
+                      {[row.chair, row.lightPower, row.lightDetach, row.lampShade, row.sticker].map((s, j) => (
                         <td key={j} className={`px-4 py-2 font-bold ${statusColor[s] ?? ''}`}>
                           {STATUS_KO[s] ?? s}
                         </td>

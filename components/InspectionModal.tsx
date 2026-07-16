@@ -9,10 +9,11 @@ interface Props {
 }
 
 const FIELDS: { key: keyof Omit<InspectionData, 'others'>; label: string }[] = [
-  { key: 'chair',     label: '🪑 의자 상태' },
-  { key: 'light',     label: '💡 조명 상태' },
-  { key: 'lampShade', label: '🏮 전등 갓' },
-  { key: 'sticker',   label: '🔖 번호 스티커' },
+  { key: 'chair',       label: '🪑 의자 상태' },
+  { key: 'lightPower',  label: '💡 조명 전원' },
+  { key: 'lightDetach', label: '🔌 조명 탈착' },
+  { key: 'lampShade',   label: '🏮 전등 갓' },
+  { key: 'sticker',     label: '🔖 번호 스티커' },
 ];
 
 const LABELS: Record<string, Record<'ok' | 'issue', string>> = {
@@ -23,13 +24,14 @@ const LABELS: Record<string, Record<'ok' | 'issue', string>> = {
 const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
   const [data, setData] = useState<InspectionData>(() => {
     const c = seat.inspection;
-    const def = (v: Status): Status => (v === 'pending' || v === 'hold') ? 'ok' : v;
+    const def = (v: Status): Status => (v === 'pending') ? 'ok' : v;
     return {
-      chair:     def(c.chair),
-      light:     def(c.light),
-      lampShade: def(c.lampShade),
-      sticker:   def((c as any).sticker ?? 'pending'),
-      others:    c.others || '',
+      chair:       def(c.chair),
+      lightPower:  def((c as any).lightPower ?? (c as any).light ?? 'pending'),
+      lightDetach: def((c as any).lightDetach ?? (c as any).light ?? 'pending'),
+      lampShade:   def(c.lampShade),
+      sticker:     def((c as any).sticker ?? 'pending'),
+      others:      c.others || '',
     };
   });
   const [isTouched, setIsTouched] = useState(false);
@@ -46,7 +48,7 @@ const InspectionModal: React.FC<Props> = ({ seat, onSave, onClose }) => {
 
   const handleReset = () => {
     if (window.confirm('이 좌석의 점검 내용을 초기화할까요?')) {
-      onSave({ chair: 'pending', light: 'pending', lampShade: 'pending', sticker: 'pending', others: '' });
+      onSave({ chair: 'pending', lightPower: 'pending', lightDetach: 'pending', lampShade: 'pending', sticker: 'pending', others: '' });
     }
   };
 
