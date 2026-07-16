@@ -15,7 +15,7 @@ type ReportRow = {
 
 const STATUS_KO: Record<string, string> = { ok: '정상', issue: '이상', pending: '미점검' };
 const KO_STATUS: Record<string, Status> = { 정상: 'ok', 이상: 'issue', 미점검: 'pending' };
-const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxeN_aURTg084lnxxm07SQn4XoBbOcYEDs_ENRi90sl-rLxxhuGtVS_xYkv-m1bDQEq/exec';
+const SHEET_URL = 'https://script.google.com/macros/s/AKfycbwPbCGN0EUQUHNUA3ygd4O1ARzmX2BAAP1twqUKcJ-OvisDaZ0aeir0tC7yfOOqDWqd/exec';
 
 const getSeatStatus = (seat: Seat): Status => {
   const { chair, lightPower, lightDetach, lampShade, sticker, others } = seat.inspection;
